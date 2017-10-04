@@ -65,12 +65,25 @@ def findSpecies(pathlist, speciesName):
 def getSummary(basedir, idlist):
     for i in idlist:
         try:
-            f=open(os.path.join(basedir, i, "summary.txt"), "r")
+            curdir=os.path.join(basedir, i)
+            f=open(os.path.join(curdir, "summary.txt"), "r")
             contents=f.read()
             f.close()
             
-            print("--Summary for %s--" % i)
+            print("----Summary for %s----" % i)
             print(contents)
+            
+            if os.path.exists(os.path.join(curdir, "matrices")):
+                print("Ready to fetch data? YES")
+                # TODO: Add additional information as appropriate based on the matrix files.
+            else:
+                print("Ready to fetch data? NO (run fetchmatrices %s)" % i)
+            
+            datapath=os.path.join(curdir, "data")
+            if os.path.exists(datapath):
+                print("Data fetched? YES in %s" % datapath)
+            else:
+                print("Data fetched? NO")
             print("")
         except:
             print("ERROR: Could not look up %s\n" % i)
@@ -85,6 +98,7 @@ def main(args):
         print("  listspecies -- Print a listing of all species defined in the database.")
         print("  findspecies <species name in quotes> -- Find all projects that match a given species.")
         print("  getsummary <list of id numbers> -- Retrieves a summary for a given data element.")
+        print("  fetchmatrices <id> -- ")
         return
     
     curlist=os.listdir(args[1])
