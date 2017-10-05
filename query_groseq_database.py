@@ -73,6 +73,13 @@ def getSummary(basedir, idlist):
             print("----Summary for %s----" % i)
             print(contents)
             
+            print("")
+            
+            if os.path.exists(os.path.join(curdir, "matrixpath.txt")):
+                print("Data matrix URL defined? YES")
+            else:
+                print("Data matrix URL defined? NO. This software cannot fetch data for this element.")
+            
             if os.path.exists(os.path.join(curdir, "matrices")):
                 print("Ready to fetch data? YES")
                 # TODO: Add additional information as appropriate based on the matrix files.
@@ -89,6 +96,38 @@ def getSummary(basedir, idlist):
             print("ERROR: Could not look up %s\n" % i)
 
 
+def fetchMatrices(basedir, idlist):
+    for i in idlist:
+        try:
+            matUrlFile=open(os.path.join(basedir, i, "matrixpath.txt"), "r")
+            matUrl=matUrlFile.read()
+            matUrlFile.close()
+            matDir=os.path.join(basedir, i, "matrices")
+            
+            if not os.path.exists(matDir):
+                try:
+                    os.makedirs(matDir)
+                except:
+                    print("ERROR: Could not create matrix storage directory for %s! This is very bad." % i)
+                    return
+            
+            print("Fetching matrix file(s)...")
+            os.system("wget -r -nH -nd -np -R .listing -P %s %sminiml/" % (matDir, matUrl.strip()))
+            
+            print("Unpacking matrix file(s)...")
+            for f in os.listdir(matDir):
+                baseName=f[:-4]
+                # For some reason, all of the files have a tgz extension when they're really just gzip'd archives.
+                realName=baseName+".gz"
+                os.system("mv %s %s" % (os.path.join(matDir, f), os.path.join(matDir, realName)))
+                os.system("gzip -d %s" % os.path.join(matDir, realName))
+                
+            print("Done with %s." % i)
+        except:
+            print("ERROR: Could not fetch data matrices for %s\n" % i)
+            print("It may be possible that the requested data element doesn't have a matrix link.")
+
+
 def main(args):
     if len(args)<3:
         print("Usage: %s dbdir command <args>" % args[0])
@@ -98,7 +137,9 @@ def main(args):
         print("  listspecies -- Print a listing of all species defined in the database.")
         print("  findspecies <species name in quotes> -- Find all projects that match a given species.")
         print("  getsummary <list of id numbers> -- Retrieves a summary for a given data element.")
-        print("  fetchmatrices <id> -- ")
+        print("  fetchmatrices <id> -- Downloads data matrices necessary to fetch data for a set.")
+        print("  getsralist <id> -- Retrieves all SRAs for a given element given that matrices are present.")
+        
         return
     
     curlist=os.listdir(args[1])
@@ -117,7 +158,16 @@ def main(args):
             print("You must specify a species name.")
             
     elif args[2]=="getsummary":
-        getSummary(args[1], args[3:])
+        try:
+            getSummary(args[1], args[3:])
+        except:
+            print("You must specify an element ID to get a summary.")
+        
+    elif args[2]=="fetchmatrices":
+        try:
+            fetchMatrices(args[1], args[3:])
+        except:
+            print("You must specify an element ID to fetch its data matrices.")
     
     else:
         print("Unknown command: %s" % args[2])

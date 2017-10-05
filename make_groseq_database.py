@@ -30,7 +30,7 @@ def genQuery(idlist):
 
 def main(args):
     if len(args)!=3:
-        print("Usage: %s idfile dbdir")
+        print("Usage: %s idfile dbdir" % args[0])
         print("Fetches project summaries and adds appropriate metadata to a database of GEO GRO-Seq data.")
         print("WARNING: This script may generate several thousand directories under dbdir.")
         return
@@ -104,6 +104,7 @@ def main(args):
         for d in datalist:
             # It appears that sample titles are all one "word"
             datalistfile.write((d[0]+u" "+d[1]).encode('utf8'))
+            datalistfile.write(u"\n")
         
         datalistfile.close()
         
@@ -111,6 +112,12 @@ def main(args):
             relationfile.write("%s %s\n" % (r[0], r[1]))
         
         relationfile.close()
+        
+        if matrixURL is not None:
+            matrixfile=open(os.path.join(args[2], curid, "matrixpath.txt"), "w")
+            matrixfile.write(matrixURL)
+            matrixfile.write("\n")
+            matrixfile.close()
 
 if __name__=="__main__":
     main(sys.argv)
