@@ -4,6 +4,9 @@
 import os
 import sys
 import urllib
+from ftplib import FTP
+import xml.etree.ElementTree as ETree
+from multiprocessing import Pool
 
 
 def isPresent(reflist, item):
@@ -40,6 +43,15 @@ def genSpeciesList(pathlist):
     print("\nTotal number of elements: %d" % sum(curSpeciesCount))
 
 
+def printTitle(path):
+    idnum=path.split('/')[-1]
+    f=open(os.path.join(path, "summary.txt"), "r")
+    title=f.readline()
+    title=title[(len(title.split()[0])+1):]
+    f.close()
+    print("%s: %s" % (idnum, title.strip()))
+
+
 def findSpecies(pathlist, speciesName):
     curFoundList=[]
     # Making this case-sensitive would just be cruel.
@@ -59,7 +71,7 @@ def findSpecies(pathlist, speciesName):
     print("Found %d elements that match \"%s\". List of paths:" % (len(curFoundList), speciesName))
     
     for c in curFoundList:
-        print(c)
+        printTitle(c)
 
 
 def getSummary(basedir, idlist):
@@ -118,14 +130,99 @@ def fetchMatrices(basedir, idlist):
             for f in os.listdir(matDir):
                 baseName=f[:-4]
                 # For some reason, all of the files have a tgz extension when they're really just gzip'd archives.
-                realName=baseName+".gz"
-                os.system("mv %s %s" % (os.path.join(matDir, f), os.path.join(matDir, realName)))
-                os.system("gzip -d %s" % os.path.join(matDir, realName))
+                #realName=baseName+".gz"
+                #os.system("mv %s %s" % (os.path.join(matDir, f), os.path.join(matDir, realName)))
+                os.system("tar -xzf %s -C %s" % (os.path.join(matDir, f), matDir))
+            os.system("rm %s" % os.path.join(matDir, "*.tgz"))
                 
             print("Done with %s." % i)
         except:
             print("ERROR: Could not fetch data matrices for %s\n" % i)
             print("It may be possible that the requested data element doesn't have a matrix link.")
+
+
+def sraHelper(url):
+    f=urllib.urlopen(url.strip())
+    content=f.read()
+    f.close()
+    return content
+
+
+def getSraList(basedir, idlist):
+    for i in idlist:
+        matDir=os.path.join(basedir, i, "matrices")
+        # if the matrix directory exists, then this element probably has the right data:
+        if os.path.exists(matDir):
+            sralist=[]
+            sraURLlist=[]
+            # Read all files in the directory:
+            dircontents=os.listdir(matDir)
+            # filter out all non-xml files:
+            flist=[]
+            for d in dircontents:
+                if d.split(".")[-1]=="xml":
+                    flist.append(d)
+            
+            for fname in flist:
+                treeFile=open(os.path.join(matDir, fname), "r")
+                curTree=ETree.parse(treeFile)
+                treeFile.close()
+                
+                # This should be the <MiniML> tag. 
+                root=curTree.getroot()
+                
+                for tag in root:
+                    if tag.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Sample":
+                        for child in tag:
+                            if child.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Type":
+                                if child.text!="SRA":
+                                    print("Found non-SRA sample.")
+                                    break;
+                            # We want relation URLs:
+                            elif child.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Supplementary-Data":
+                                if child.attrib["type"]=="SRA Experiment":
+                                    sraURLlist.append(child.text)
+            # Now that we (hopefully) have a list of urls:
+            if len(sraURLlist)==0:
+                print("No SRA links found in matrix file. Please check for data manually.")
+                return
+            
+            # We now need to enumerate all SRAs defined in the FTP links:
+            print("Fetching data from specified URLs (this may take a while)...")
+            p=Pool(500)
+            contentSet=p.map(sraHelper, sraURLlist)
+            for c in contentSet:
+                lines=c.splitlines()
+                
+                for l in lines:
+                    sralist.append(l.split()[-1].strip())
+            
+            print("\nFound the following SRA elements for download:")
+            for s in sralist:
+                print(s)
+            
+            print("\nWriting list of links to file...")
+            f=open(os.path.append(basedir, "rawfilelist.txt"), "w")
+            
+            for u in sraURLlist:
+                f.write("%s\n" % u)
+            
+            f.close()
+                
+        else:
+            print("ERROR: No matrices defined in %s" % matDir)
+
+
+def getReadyToDownload(pathlist):
+    readylist=[]
+    for p in pathlist:
+        if os.path.exists(os.path.join(p, "matrices")):
+            readylist.append(p)
+    
+    print("%d of %d elements are ready to be fetched. They are:" % (len(readylist), len(pathlist)))
+    
+    for r in readylist:
+        printTitle(r)
 
 
 def main(args):
@@ -139,6 +236,7 @@ def main(args):
         print("  getsummary <list of id numbers> -- Retrieves a summary for a given data element.")
         print("  fetchmatrices <id> -- Downloads data matrices necessary to fetch data for a set.")
         print("  getsralist <id> -- Retrieves all SRAs for a given element given that matrices are present.")
+        print("  getreadytodownload -- Retrieves a list of all projects with fetched matrix files.")
         
         return
     
@@ -168,7 +266,12 @@ def main(args):
             fetchMatrices(args[1], args[3:])
         except:
             print("You must specify an element ID to fetch its data matrices.")
-    
+    elif args[2]=="getsralist":
+        getSraList(args[1], args[3:])
+        
+    elif args[2]=="getreadytodownload":
+        getReadyToDownload(pathlist)
+        
     else:
         print("Unknown command: %s" % args[2])
 
