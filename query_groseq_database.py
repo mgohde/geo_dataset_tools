@@ -150,6 +150,7 @@ def sraHelper(url):
 
 def getSraList(basedir, idlist):
     for i in idlist:
+        print("Finding SRAs for %s..." % i)
         matDir=os.path.join(basedir, i, "matrices")
         # if the matrix directory exists, then this element probably has the right data:
         if os.path.exists(matDir):
@@ -188,7 +189,7 @@ def getSraList(basedir, idlist):
                 return
             
             # We now need to enumerate all SRAs defined in the FTP links:
-            print("Fetching data from specified URLs (this may take a while)...")
+            print("Fetching data from specified SRA index URLs (this may take a while)...")
             p=Pool(500)
             contentSet=p.map(sraHelper, sraURLlist)
             for c in contentSet:
@@ -201,11 +202,13 @@ def getSraList(basedir, idlist):
             for s in sralist:
                 print(s)
             
-            print("\nWriting list of links to file...")
-            f=open(os.path.append(basedir, "rawfilelist.txt"), "w")
+            outPath=os.path.join(basedir, i, "%s.sralist" % i)
+            print("\nWriting list of links to %s" % outPath)
+            f=open(outPath, "w")
             
             for u in sraURLlist:
-                f.write("%s\n" % u)
+                # Each URL already has a newline character in it, for better or for worse.
+                f.write("%s\n" % u.strip())
             
             f.close()
                 
@@ -213,7 +216,7 @@ def getSraList(basedir, idlist):
             print("ERROR: No matrices defined in %s" % matDir)
 
 
-def getReadyToDownload(pathlist):
+def getReadyToSra(pathlist):
     readylist=[]
     for p in pathlist:
         if os.path.exists(os.path.join(p, "matrices")):
@@ -223,6 +226,42 @@ def getReadyToDownload(pathlist):
     
     for r in readylist:
         printTitle(r)
+
+
+def getReadyToDownload(pathlist):
+    print("The following elements have SRA list files:")
+    numFound=0
+    for p in pathlist:
+        # Determine if there exists a .sralist file in this directory:
+        contents=os.listdir(p)
+        
+        for c in contents:
+            ctoks=c.split('.')
+            try:
+                if ctoks[1]=="sralist":
+                    numFound+=1
+                    printTitle(p)
+            except:
+                # Do nothing
+                pass
+    
+    print("\n%d of %d elements have SRA lists and can be immediately downloaded." % (numFound, len(pathlist)))
+
+
+def download(basedir, elem, outdir):
+    # Attempt to open the file:
+    datafile=os.path.join(basedir, elem, "%s.sralist" % elem)
+    
+    try:
+        f=open(datafile, "r")
+        lines=f.read().splitlines()
+        f.close()
+        
+        # Each line should represent one URL.
+        for u in lines:
+            os.system("wget -r -nH -nd -np -R index.html* -P %s %s" % (outdir, u))
+    except:
+        print("Error: can't open %s" % datafile)
 
 
 def main(args):
@@ -235,9 +274,11 @@ def main(args):
         print("  findspecies <species name in quotes> -- Find all projects that match a given species.")
         print("  getsummary <list of id numbers> -- Retrieves a summary for a given data element.")
         print("  fetchmatrices <id> -- Downloads data matrices necessary to fetch data for a set.")
+        print("  fetchallmatrices -- Fetch as many matrix files as possible. This will be slow!")
         print("  getsralist <id> -- Retrieves all SRAs for a given element given that matrices are present.")
-        print("  getreadytodownload -- Retrieves a list of all projects with fetched matrix files.")
-        
+        print("  getreadytosra -- Retrieves a list of all projects with fetched matrix files.")
+        print("  getreadytodownload -- Retrieves a list of all projects that can be downloaded immediately.")
+        print("  download <id> <outputdir> -- Downloads data into the specified directory")
         return
     
     curlist=os.listdir(args[1])
@@ -266,9 +307,16 @@ def main(args):
             fetchMatrices(args[1], args[3:])
         except:
             print("You must specify an element ID to fetch its data matrices.")
+            
+    elif args[2]=="fetchallmatrices":
+        fetchMatrices(args[1], curlist)
+        
     elif args[2]=="getsralist":
         getSraList(args[1], args[3:])
         
+    elif args[2]=="getreadytosra":
+        getReadyToSra(pathlist)
+    
     elif args[2]=="getreadytodownload":
         getReadyToDownload(pathlist)
         
