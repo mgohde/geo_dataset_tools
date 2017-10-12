@@ -32,19 +32,15 @@ def genQuery(idlist):
 def ePost(query):
     # Since urllib isn't working for a dataset this large, we may need to manually POST the data
     # with httplib:
-    conn=httplib.HTTPConnection("eutils.ncbi.nlm.nih.gov")
-    header={"Content-type": "application/x-www-form-urlencoded", "Accept":"text/xml"}
-    conn.request("POST", "/entrez/eutils/epost.fcgi", query, header)
-    #urlFile=urllib.urlopen("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/epost.fcgi", query)
+    #conn=httplib.HTTPConnection("eutils.ncbi.nlm.nih.gov")
+    #header={"Content-type": "application/x-www-form-urlencoded", "Accept":"text/xml"}
+    #conn.request("POST", "/entrez/eutils/epost.fcgi", query, header)
+    urlFile=urllib.urlopen("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/epost.fcgi", query)
     
     # Now parse the XML tree:
-    #contents=urlFile.read()
-    urlFile=contents.getresponse()
     contents=urlFile.read()
-    searchTree=ETree.parse(contents)
+    root=ETree.fromstring(contents)
     urlFile.close()
-    
-    root=searchTree.getroot()
     
     webEnv=None
     queryKey=None
@@ -78,18 +74,18 @@ def main(args):
     
     # Now let's query the database:
     # Use ePost to cache the query:
-    webEnv=None
-    queryKey=None
+    #webEnv=None
+    #queryKey=None
     
     # TODO: Consider just running the query and having the eSearch script store its results 
     # in a WebEnv.
-    try:
-        webEnv, queryKey=ePost(qstr)
-    except:
-        print("Error: ePost didn't return a valid query key or WebEnv parameter.")
-        return
+    #try:
+    #    webEnv, queryKey=ePost(qstr)
+    #except:
+    #    print("Error: ePost didn't return a valid query key or WebEnv parameter.")
+    #    return
     
-    qstr="db=gds&query_key=%s&WebEnv=%s&retmax=10000" % (webEnv, queryKey)
+    #qstr="db=gds&query_key=%s&WebEnv=%s" % (queryKey, webEnv)
     
     urlFile=urllib.urlopen("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi", qstr)
     projects=[]
