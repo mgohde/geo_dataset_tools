@@ -6,6 +6,7 @@
 import os
 import sys
 import urllib
+import httplib
 import xml.etree.ElementTree as ETree
 
 
@@ -29,10 +30,18 @@ def genQuery(idlist):
 
 
 def ePost(query):
-    urlFile=urllib.urlopen("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/epost.fcgi", query)
+    # Since urllib isn't working for a dataset this large, we may need to manually POST the data
+    # with httplib:
+    conn=httplib.HTTPConnection("eutils.ncbi.nlm.nih.gov")
+    header={"Content-type": "application/x-www-form-urlencoded", "Accept":"text/xml"}
+    conn.request("POST", "/entrez/eutils/epost.fcgi", query, header)
+    #urlFile=urllib.urlopen("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/epost.fcgi", query)
     
     # Now parse the XML tree:
-    searchTree=ETree.parse(urlFile)
+    #contents=urlFile.read()
+    urlFile=contents.getresponse()
+    contents=urlFile.read()
+    searchTree=ETree.parse(contents)
     urlFile.close()
     
     root=searchTree.getroot()
@@ -47,6 +56,8 @@ def ePost(query):
         elif elem.tag=="QueryKey":
             queryKey=elem.text
     if webEnv is None or queryKey is None:
+        # Since we're in an error condition right now:
+        print(contents)
         return None
     else:
         return (webEnv, queryKey)
