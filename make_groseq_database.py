@@ -28,6 +28,30 @@ def genQuery(idlist):
     return rStr
 
 
+def ePost(query):
+    urlFile=urllib.urlopen("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/epost.fcgi", query)
+    
+    # Now parse the XML tree:
+    searchTree=ETree.parse(urlFile)
+    urlFile.close()
+    
+    root=searchTree.getroot()
+    
+    webEnv=None
+    queryKey=None
+    
+    for elem in root:
+        # We're looking for a WebEnv tag:
+        if elem.tag=="WebEnv":
+            webEnv=elem.text
+        elif elem.tag=="QueryKey":
+            queryKey=elem.text
+    if webEnv is None or queryKey is None:
+        return None
+    else:
+        return (webEnv, queryKey)
+
+    
 def main(args):
     if len(args)!=3:
         print("Usage: %s idfile dbdir" % args[0])
@@ -42,6 +66,20 @@ def main(args):
     qstr=genQuery(ids)
     
     # Now let's query the database:
+    # Use ePost to cache the query:
+    webEnv=None
+    queryKey=None
+    
+    # TODO: Consider just running the query and having the eSearch script store its results 
+    # in a WebEnv.
+    try:
+        webEnv, queryKey=ePost(qstr)
+    except:
+        print("Error: ePost didn't return a valid query key or WebEnv parameter.")
+        return
+    
+    qstr="db=gds&query_key=%s&WebEnv=%s&retmax=10000" % (webEnv, queryKey)
+    
     urlFile=urllib.urlopen("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi", qstr)
     projects=[]
     
@@ -118,6 +156,9 @@ def main(args):
             matrixfile.write(matrixURL)
             matrixfile.write("\n")
             matrixfile.close()
+    
+    urlFile.close()
+
 
 if __name__=="__main__":
     main(sys.argv)
