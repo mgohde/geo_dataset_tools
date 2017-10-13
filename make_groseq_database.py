@@ -101,6 +101,7 @@ def main(args):
         taxonfile=open(os.path.join(args[2], curid, "taxon.txt"), "w")
         datalistfile=open(os.path.join(args[2], curid, "datalist.txt"), "w")
         relationfile=open(os.path.join(args[2], curid, "relations.txt"), "w")
+        typefile=open(os.path.join(args[2], curid, "type.txt"), "w")
         
         accession=""
         postedDate=""
@@ -110,6 +111,7 @@ def main(args):
         relations=[]
         taxon=u""
         matrixURL=""
+        entryType=""
         
         for c in doc[1:]:
             curname=c.attrib["Name"]
@@ -123,6 +125,8 @@ def main(args):
                 postedDate=c.text
             elif curname=="Accession":
                 accession=c.text
+            elif curname=="entryType":
+                entryType=c.text
             elif curname=="Samples":
                 for sample in c:
                     # This should be (Title, Accession#)
@@ -138,6 +142,7 @@ def main(args):
         summaryfile.write(u"Posted: %s\n" % postedDate)
         summaryfile.write(u"Accession nr: %s\n" % accession)
         summaryfile.write(u"Species: %s\n" % taxon)
+        summaryfile.write(u"Entry Type: %s" % entryType)
         summaryfile.write(u"Matrix URL/FTP Link: %s\n" % matrixURL)
         summaryfile.write(u"Summary (begins on next line):\n")
         summaryfile.write(summary.encode('utf8'))
@@ -157,6 +162,9 @@ def main(args):
             relationfile.write("%s %s\n" % (r[0], r[1]))
         
         relationfile.close()
+        
+        typefile.write(entryType.strip())
+        typefile.close()
         
         if matrixURL is not None:
             matrixfile=open(os.path.join(args[2], curid, "matrixpath.txt"), "w")

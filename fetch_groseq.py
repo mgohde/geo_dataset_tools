@@ -13,6 +13,8 @@ def main(args):
         print("Fetch a list of GRO-Seq datasets present on GEO.")
         return
     
+    # TODO: add explicit term specification:
+    # ie. for pro-seq, etc.
     systemargs={"db": "gds", "term": "gro-seq", "retmax": 100000}
     paramlist=urllib.urlencode(systemargs)
     

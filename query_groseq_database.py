@@ -17,23 +17,32 @@ def isPresent(reflist, item):
     return (False, 0)
 
 
-def genSpeciesList(pathlist):
+def isSeries(pathToElem):
+    typefile=open(os.path.join(pathToElem, "type.txt"))
+    contents=typefile.read()
+    typefile.close()
+    
+    return contents=="GSE"
+
+
+def genSpeciesList(pathlist, seriesOnly):
     # This should be O(n^2). Ewwww...
     curSpeciesList=[]
     curSpeciesCount=[]
     for p in pathlist:
-        taxon=open(os.path.join(p, "taxon.txt"), "r")
-        contents=taxon.read().split(';')
-        
-        for c in contents:
-            c=c.strip()
-            (truth, idx)=isPresent(curSpeciesList, c)
-            if not truth:
-                curSpeciesList.append(c)
-                curSpeciesCount.append(1)
-            else:
-                curSpeciesCount[idx]+=1
-        taxon.close()
+        if isSeries(p) or not seriesOnly:
+            taxon=open(os.path.join(p, "taxon.txt"), "r")
+            contents=taxon.read().split(';')
+            
+            for c in contents:
+                c=c.strip()
+                (truth, idx)=isPresent(curSpeciesList, c)
+                if not truth:
+                    curSpeciesList.append(c)
+                    curSpeciesCount.append(1)
+                else:
+                    curSpeciesCount[idx]+=1
+            taxon.close()
     
     print("List of available species:")
     i=0
@@ -52,21 +61,22 @@ def printTitle(path):
     print("%s: %s" % (idnum, title.strip()))
 
 
-def findSpecies(pathlist, speciesName):
+def findSpecies(pathlist, speciesName, seriesOnly):
     curFoundList=[]
     # Making this case-sensitive would just be cruel.
     upperName=speciesName.upper()
     
     for p in pathlist:
-        taxon=open(os.path.join(p, "taxon.txt"), "r")
-        contents=taxon.read().split(';')
-        
-        for c in contents:
-            c=c.strip()
-            if c.upper()==upperName:
-                #curFoundList.append(p.split('/')[-1])
-                curFoundList.append(p)
-        taxon.close()
+        if isSeries(p) or not seriesOnly:
+            taxon=open(os.path.join(p, "taxon.txt"), "r")
+            contents=taxon.read().split(';')
+            
+            for c in contents:
+                c=c.strip()
+                if c.upper()==upperName:
+                    #curFoundList.append(p.split('/')[-1])
+                    curFoundList.append(p)
+            taxon.close()
     
     print("Found %d elements that match \"%s\". List of paths:" % (len(curFoundList), speciesName))
     
@@ -264,16 +274,48 @@ def download(basedir, elem, outdir):
         print("Error: can't open %s" % datafile)
 
 
+def fetchspmats(basedir, pathlist, speciesname, seriesOnly):
+    print("Attempting to fetch all matrices for '%s'..." % speciesname)
+    upperName=speciesname.upper()
+    
+    curFoundList=[]
+    # Todo: just write a function to do this lookup so we don't repeat code.
+    for p in pathlist:
+        if isSeries(p) or not seriesOnly:
+            taxon=open(os.path.join(p, "taxon.txt"), "r")
+            contents=taxon.read().split(';')
+            
+            for c in contents:
+                c=c.strip()
+                if c.upper()==upperName:
+                    curFoundList.append(p.split('/')[-1])
+                    #curFoundList.append(p)
+            taxon.close()
+            
+    fetchMatrices(basedir, curFoundList)
+
+    
 def main(args):
+    progName=args[0]
+    seriesOnly=False
+    
+    # This kludge allows for switches to be specified without disrupting any other behavior.
+    if len(args)!=1:
+        if args[1]=='-s':
+            seriesOnly=True
+            args=args[1:]
+    
     if len(args)<3:
-        print("Usage: %s dbdir command <args>" % args[0])
+        print("Usage: %s [-s] dbdir command <args>" % progName)
         print("Query a GRO-Seq metadata database fetched with make_groseq_database.py")
+        print("If -s is specified, then only series IDs will be reported on")
         print("")
         print("List of commands:")
         print("  listspecies -- Print a listing of all species defined in the database.")
         print("  findspecies <species name in quotes> -- Find all projects that match a given species.")
         print("  getsummary <list of id numbers> -- Retrieves a summary for a given data element.")
         print("  fetchmatrices <id> -- Downloads data matrices necessary to fetch data for a set.")
+        print("  fetchspmats <species name> -- Fetches all matrices for a given species.")
         print("  fetchallmatrices -- Fetch as many matrix files as possible. This will be slow!")
         print("  getsralist <id> -- Retrieves all SRAs for a given element given that matrices are present.")
         print("  getreadytosra -- Retrieves a list of all projects with fetched matrix files.")
@@ -288,11 +330,11 @@ def main(args):
         pathlist.append(os.path.join(args[1], c))
     
     if args[2]=="listspecies":
-        genSpeciesList(pathlist)
+        genSpeciesList(pathlist, seriesOnly)
     
     elif args[2]=="findspecies":
         try:
-            findSpecies(pathlist, args[3])
+            findSpecies(pathlist, args[3], seriesOnly)
         except:
             print("You must specify a species name.")
             
@@ -307,6 +349,12 @@ def main(args):
             fetchMatrices(args[1], args[3:])
         except:
             print("You must specify an element ID to fetch its data matrices.")
+    
+    elif args[2]=="fetchspmats":
+        #try:
+            fetchspmats(args[1], pathlist, args[3], seriesOnly)
+        #except:
+        #    print("You must specify a species name to fetch matrices for that species.")
             
     elif args[2]=="fetchallmatrices":
         fetchMatrices(args[1], curlist)
