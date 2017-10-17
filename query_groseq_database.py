@@ -52,13 +52,74 @@ def genSpeciesList(pathlist, seriesOnly):
     print("\nTotal number of elements: %d" % sum(curSpeciesCount))
 
 
+def findContribNameDate(matFile):
+    firstContrib=None
+    pubYear=None
+    
+    f=open(matFile, "r")
+    eTree=curTree=ETree.parse(f)
+    f.close()
+    
+    root=eTree.getroot()
+    
+    for elem in root:
+        # Tag, text, attrib.
+        if elem.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Contributor" and firstContrib is None:
+            if elem.attrib['iid']=="contrib1":
+                # This is exactly as painful as it looks:
+                for child in elem:
+                    if child.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Person":
+                        for nameChunk in child:
+                            if nameChunk.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Last":
+                                firstContrib=nameChunk.text
+        elif elem.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Series": # and pubYear is None:
+            for child in elem:
+                if child.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Status":
+                    for date in child:
+                        if date.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Release-Date":
+                            # Dates are formatted as yyyy-mm-dd
+                            newPubYear=date.text.split('-')[0]
+                            
+                            if pubYear is None:
+                                pubYear=newPubYear
+                            elif int(pubYear)<int(newPubYear):
+                                pubYear=newPubYear
+        
+        # Terminate the loop early if we've found both elements:
+        if firstContrib is not None and pubYear is not None:
+            break
+    
+    if firstContrib is None or pubYear is None:
+        return None
+    
+    else:
+        return firstContrib+pubYear
+
+
 def printTitle(path):
     idnum=path.split('/')[-1]
+    matDir=os.path.join(path, "matrices")
+    contribName=""
+    if os.path.exists(matDir):
+        if os.path.exists(os.path.join(path, "namecache.txt")):
+            with open(os.path.join(path, "namecache.txt"), "r") as nameFile:
+                contribName='"%s" ' % nameFile.read()
+        else:
+            for mat in os.listdir(matDir):
+                pName=findContribNameDate(os.path.join(matDir, mat))
+                if pName is not None:
+                    pName=pName.strip()
+                    with open(os.path.join(path, "namecache.txt"), "w") as nameFile:
+                        nameFile.write(pName)
+                    
+                    contribName='"%s" ' % pName
+                    break
+                
     f=open(os.path.join(path, "summary.txt"), "r")
     title=f.readline()
     title=title[(len(title.split()[0])+1):]
     f.close()
-    print("%s: %s" % (idnum, title.strip()))
+    print("%s%s: %s\n" % (contribName, idnum, title.strip()))
 
 
 def findSpecies(pathlist, speciesName, seriesOnly):
@@ -146,6 +207,12 @@ def fetchMatrices(basedir, idlist):
             os.system("rm %s" % os.path.join(matDir, "*.tgz"))
                 
             print("Done with %s." % i)
+            
+            # Cache the paper's "name":
+            f=open(os.path.join(basedir, i, "namecache.txt"), "w")
+            f.write(findContribNameData(os.path.join(matDir, os.listdir(matDir)[0])).strip())
+            f.close()
+            
         except:
             print("ERROR: Could not fetch data matrices for %s\n" % i)
             print("It may be possible that the requested data element doesn't have a matrix link.")
@@ -333,10 +400,10 @@ def main(args):
         genSpeciesList(pathlist, seriesOnly)
     
     elif args[2]=="findspecies":
-        try:
+        #try:
             findSpecies(pathlist, args[3], seriesOnly)
-        except:
-            print("You must specify a species name.")
+        #except:
+        #    print("You must specify a species name.")
             
     elif args[2]=="getsummary":
         try:
@@ -351,10 +418,10 @@ def main(args):
             print("You must specify an element ID to fetch its data matrices.")
     
     elif args[2]=="fetchspmats":
-        #try:
+        try:
             fetchspmats(args[1], pathlist, args[3], seriesOnly)
-        #except:
-        #    print("You must specify a species name to fetch matrices for that species.")
+        except:
+            print("You must specify a species name to fetch matrices for that species.")
             
     elif args[2]=="fetchallmatrices":
         fetchMatrices(args[1], curlist)
