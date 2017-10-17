@@ -96,6 +96,25 @@ def findContribNameDate(matFile):
         return firstContrib+pubYear
 
 
+def findContribByPaper(pathList, paperName):
+    adjustedPaperName=paperName.strip().upper()
+    for p in pathList:
+        matDir=os.path.join(p, "matrices")
+        ncName=os.path.join(p, "namecache.txt")
+        if os.path.exists(ncName):
+            with open(ncName, "r") as ncFile:
+                # Be as forgiving as possible:
+                if ncFile.read().strip().upper()==adjustedPaperName:
+                    return p.split('/')[-1]
+        elif os.path.exists(matDir):
+            for matFile in os.path.listdir(matDir):
+                computedName=findContribNameDate(os.path.join(matDir, matFile))
+                if computedName is not None:
+                    if computedName.strip().upper()==adjustedPaperName:
+                        return p.split('/')[-1]
+    return None
+    
+
 def printTitle(path):
     idnum=path.split('/')[-1]
     matDir=os.path.join(path, "matrices")
@@ -145,9 +164,17 @@ def findSpecies(pathlist, speciesName, seriesOnly):
         printTitle(c)
 
 
-def getSummary(basedir, idlist):
+def getSummary(basedir, idlist, pathList):
     for i in idlist:
         try:
+            # Ie. if the value given is a paper name:
+            if not (i[0]>='0' and i[0]<='9'):
+                paperName=i
+                i=findContribByPaper(pathList, paperName)
+                if i is None:
+                    print("ERROR: couldn't find element matching title: %s" % paperName)
+                    continue
+            
             curdir=os.path.join(basedir, i)
             f=open(os.path.join(curdir, "summary.txt"), "r")
             contents=f.read()
@@ -225,8 +252,16 @@ def sraHelper(url):
     return content
 
 
-def getSraList(basedir, idlist):
+def getSraList(basedir, idlist, pathList):
     for i in idlist:
+        # Ie. if the value given is a paper name:
+        if not (i[0]>='0' and i[0]<='9'):
+            paperName=i
+            i=findContribByPaper(pathList, paperName)
+            if i is None:
+                print("ERROR: couldn't find element matching title: %s" % paperName)
+                continue
+        
         print("Finding SRAs for %s..." % i)
         matDir=os.path.join(basedir, i, "matrices")
         # if the matrix directory exists, then this element probably has the right data:
@@ -380,14 +415,14 @@ def main(args):
         print("List of commands:")
         print("  listspecies -- Print a listing of all species defined in the database.")
         print("  findspecies <species name in quotes> -- Find all projects that match a given species.")
-        print("  getsummary <list of id numbers> -- Retrieves a summary for a given data element.")
+        print("  getsummary <list of id numbers or paper names> -- Retrieves a summary for a given data element.")
         print("  fetchmatrices <id> -- Downloads data matrices necessary to fetch data for a set.")
         print("  fetchspmats <species name> -- Fetches all matrices for a given species.")
         print("  fetchallmatrices -- Fetch as many matrix files as possible. This will be slow!")
-        print("  getsralist <id> -- Retrieves all SRAs for a given element given that matrices are present.")
+        print("  getsralist <id or paper name> -- Retrieves all SRAs for a given element given that matrices are present.")
         print("  getreadytosra -- Retrieves a list of all projects with fetched matrix files.")
         print("  getreadytodownload -- Retrieves a list of all projects that can be downloaded immediately.")
-        print("  download <id> <outputdir> -- Downloads data into the specified directory")
+        print("  download <id or paper name> <outputdir> -- Downloads data into the specified directory")
         return
     
     curlist=os.listdir(args[1])
@@ -400,16 +435,16 @@ def main(args):
         genSpeciesList(pathlist, seriesOnly)
     
     elif args[2]=="findspecies":
-        #try:
+        try:
             findSpecies(pathlist, args[3], seriesOnly)
-        #except:
-        #    print("You must specify a species name.")
+        except:
+            print("You must specify a species name.")
             
     elif args[2]=="getsummary":
         try:
-            getSummary(args[1], args[3:])
+            getSummary(args[1], args[3:], pathlist)
         except:
-            print("You must specify an element ID to get a summary.")
+            print("You must specify an element ID or paper name to get a summary.")
         
     elif args[2]=="fetchmatrices":
         try:
@@ -427,7 +462,7 @@ def main(args):
         fetchMatrices(args[1], curlist)
         
     elif args[2]=="getsralist":
-        getSraList(args[1], args[3:])
+        getSraList(args[1], args[3:], pathlist)
         
     elif args[2]=="getreadytosra":
         getReadyToSra(pathlist)
