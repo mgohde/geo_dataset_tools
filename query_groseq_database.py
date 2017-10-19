@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # query_groseq_database.py -- A script to query the data fetched by make_groseq_database.py
+# Note: this file is getting large enough that it may be useful to split it up into multiple modules.
 
 import os
 import sys
@@ -44,11 +45,15 @@ def genSpeciesList(pathlist, seriesOnly):
                     curSpeciesCount[idx]+=1
             taxon.close()
     
+    # Generate and sort a list of species:
+    newSpeciesList=[(curSpeciesCount[i], val) for i, val in enumerate(curSpeciesList)]
+    newSpeciesList.sort()
+    newSpeciesList.reverse()
+    
     print("List of available species:")
-    i=0
-    for c in curSpeciesList:
-        print("%d %s" % (curSpeciesCount[i], c))
-        i+=1
+    for elem in newSpeciesList:
+        print("%d %s" % (elem[0], elem[1]))
+    
     print("\nTotal number of elements: %d" % sum(curSpeciesCount))
 
 
@@ -116,7 +121,11 @@ def findContribByPaper(pathList, paperName):
     
 
 def printTitle(path):
-    idnum=path.split('/')[-1]
+    pathToks=path.split('/')
+    idnum=pathToks[-1]
+    protocol=pathToks[-2]
+    #idnum=path.split('/')[-1]
+    
     matDir=os.path.join(path, "matrices")
     contribName=""
     if os.path.exists(matDir):
@@ -138,10 +147,17 @@ def printTitle(path):
     title=f.readline()
     title=title[(len(title.split()[0])+1):]
     f.close()
-    print("%s%s: %s\n" % (contribName, idnum, title.strip()))
+    print("[%s] %s%s: %s\n" % (protocol, contribName, idnum, title.strip()))
 
 
-def findSpecies(pathlist, speciesName, seriesOnly):
+def genProtoSetStr(protocolSet):
+    retStr=protocolSet[0]
+    for p in protocolSet[1:]:
+        retStr+=",%s" % p
+    return retStr
+
+        
+def findSpecies(pathlist, speciesName, seriesOnly, protocolSet):
     curFoundList=[]
     # Making this case-sensitive would just be cruel.
     upperName=speciesName.upper()
@@ -158,15 +174,26 @@ def findSpecies(pathlist, speciesName, seriesOnly):
                     curFoundList.append(p)
             taxon.close()
     
-    print("Found %d elements that match \"%s\". List of paths:" % (len(curFoundList), speciesName))
+    print("Found %d elements that match \"%s\" given protocol(s) %s" % (len(curFoundList), speciesName, genProtoSetStr(protocolSet)))
+    print("List of paths:\n")
     
     for c in curFoundList:
         printTitle(c)
 
 
-def getSummary(basedir, idlist, pathList):
+def findProto(basedir, idNum, protocolSet):
+    for p in protocolSet:
+        if os.path.exists(os.path.join(basedir, p, idNum)):
+            return p
+    return None
+
+
+def getSummary(basedir, idlist, pathList, protocolSet):
     for i in idlist:
         try:
+            # Fortunately, while this is linear, it's linear relative to the (very small) set of protocols.
+            p=findProto(basedir, i, protocolSet)
+            
             # Ie. if the value given is a paper name:
             if not (i[0]>='0' and i[0]<='9'):
                 paperName=i
@@ -175,7 +202,7 @@ def getSummary(basedir, idlist, pathList):
                     print("ERROR: couldn't find element matching title: %s" % paperName)
                     continue
             
-            curdir=os.path.join(basedir, i)
+            curdir=os.path.join(basedir, p, i)
             f=open(os.path.join(curdir, "summary.txt"), "r")
             contents=f.read()
             f.close()
@@ -201,18 +228,21 @@ def getSummary(basedir, idlist, pathList):
                 print("Data fetched? YES in %s" % datapath)
             else:
                 print("Data fetched? NO")
+                
+            print("Protocol: %s" % p)
             print("")
         except:
             print("ERROR: Could not look up %s\n" % i)
 
 
-def fetchMatrices(basedir, idlist):
+def fetchMatrices(basedir, idlist, protocolSet):
     for i in idlist:
         try:
-            matUrlFile=open(os.path.join(basedir, i, "matrixpath.txt"), "r")
+            p=findProto(basedir, i, protocolSet)
+            matUrlFile=open(os.path.join(basedir, p, i, "matrixpath.txt"), "r")
             matUrl=matUrlFile.read()
             matUrlFile.close()
-            matDir=os.path.join(basedir, i, "matrices")
+            matDir=os.path.join(basedir, p, i, "matrices")
             
             if not os.path.exists(matDir):
                 try:
@@ -236,7 +266,7 @@ def fetchMatrices(basedir, idlist):
             print("Done with %s." % i)
             
             # Cache the paper's "name":
-            f=open(os.path.join(basedir, i, "namecache.txt"), "w")
+            f=open(os.path.join(basedir, p, i, "namecache.txt"), "w")
             f.write(findContribNameData(os.path.join(matDir, os.listdir(matDir)[0])).strip())
             f.close()
             
@@ -252,8 +282,10 @@ def sraHelper(url):
     return content
 
 
-def getSraList(basedir, idlist, pathList):
+def getSraList(basedir, idlist, pathList, protocolSet):
     for i in idlist:
+        p=findProto(basedir, i, protocolSet)
+        
         # Ie. if the value given is a paper name:
         if not (i[0]>='0' and i[0]<='9'):
             paperName=i
@@ -263,7 +295,7 @@ def getSraList(basedir, idlist, pathList):
                 continue
         
         print("Finding SRAs for %s..." % i)
-        matDir=os.path.join(basedir, i, "matrices")
+        matDir=os.path.join(basedir, p, i, "matrices")
         # if the matrix directory exists, then this element probably has the right data:
         if os.path.exists(matDir):
             sralist=[]
@@ -314,7 +346,7 @@ def getSraList(basedir, idlist, pathList):
             for s in sralist:
                 print(s)
             
-            outPath=os.path.join(basedir, i, "%s.sralist" % i)
+            outPath=os.path.join(basedir, p, i, "%s.sralist" % i)
             print("\nWriting list of links to %s" % outPath)
             f=open(outPath, "w")
             
@@ -360,9 +392,10 @@ def getReadyToDownload(pathlist):
     print("\n%d of %d elements have SRA lists and can be immediately downloaded." % (numFound, len(pathlist)))
 
 
-def download(basedir, elem, outdir):
+def download(basedir, elem, outdir, protocolSet):
     # Attempt to open the file:
-    datafile=os.path.join(basedir, elem, "%s.sralist" % elem)
+    p=findProto(basedir, elem, protocolSet)
+    datafile=os.path.join(basedir, p, elem, "%s.sralist" % elem)
     
     try:
         f=open(datafile, "r")
@@ -396,23 +429,85 @@ def fetchspmats(basedir, pathlist, speciesname, seriesOnly):
             
     fetchMatrices(basedir, curFoundList)
 
+
+def listProtocols(protoList):
+    print("Set of protocols currently defined in the database:")
+    for p in protoList:
+        print("   %s" % p)
+    print("Specific protocols can be selected with the -pt parameter.")
+    print("Example: -pt=gro-seq,pro-seq")
     
+
+def genIdSet(idSet, basedir, protoName, seriesOnly):
+    outSet=[]
+    
+    for i in idSet:
+        if isSeries(os.path.join(basedir, protoName, i)) or not seriesOnly:
+            outSet.append(i)
+    
+    return outSet
+
+
+def queryProtocol(basedir, protoName, idsByProto, seriesOnly):
+    try:
+        idset=genIdSet(idsByProto[protoName], basedir, protoName, seriesOnly)
+        
+        print("Found %d elements matching protocol %s.\n" % (len(idset), protoName))
+        
+        for i in idset:
+            printTitle(os.path.join(basedir, protoName, i))
+    except:
+        print("ERROR: Query failed for protocol %s. Is it shown by the listprotocols command?" % protoName)
+
+
+def protocolOverlap(basedir, protocolSet, seriesOnly, idsByProto):
+    # First step: determine which elements overlap by hammering the hell out of the idsByProto strucutre:
+    # This implementation is... horribly, painfully inefficient.
+    # TODO: Make this less awful.
+    for p in protocolSet:
+        plist=idsByProto[p]
+        for q in protocolSet:
+            if p==q:
+                continue
+            qlist=idsByProto[q]
+            # Determine which IDs match:
+            for r in plist:
+                for s in qlist:
+                    if r==s:
+                        print("[%s] %s ----> [%s] %s" % (p, r, q, s))
+    
+
 def main(args):
     progName=args[0]
     seriesOnly=False
     
-    # This kludge allows for switches to be specified without disrupting any other behavior.
-    if len(args)!=1:
-        if args[1]=='-s':
-            seriesOnly=True
-            args=args[1:]
+    protocolSet=None
     
+    # This kludge allows for switches to be specified without disrupting any other behavior.
+    newArgs=[]
+    if len(args)!=1:
+        for a in args:
+            aToks=a.split("=")
+            if a=='-s':
+                seriesOnly=True
+                #args=args[1:]
+            elif aToks[0]=="-pt":
+                protocolSet=aToks[1].split(',')
+            else:
+                newArgs.append(a)
+        args=newArgs
+                
+        
     if len(args)<3:
         print("Usage: %s [-s] dbdir command <args>" % progName)
         print("Query a GRO-Seq metadata database fetched with make_groseq_database.py")
         print("If -s is specified, then only series IDs will be reported on")
+        print("If -pt=<comma separated list of protocols> is specified, then only IDs with a specific protocol will be reported on.")
         print("")
         print("List of commands:")
+        print("  listprotocols -- List all protocols in the current database.")
+        print("  queryprotocol -- Print all elements matching a given protocol.")
+        print("  protocoloverlap -- Print out the set of elements that overlap between different protocols.")
         print("  listspecies -- Print a listing of all species defined in the database.")
         print("  findspecies <species name in quotes> -- Find all projects that match a given species.")
         print("  getsummary <list of id numbers or paper names> -- Retrieves a summary for a given data element.")
@@ -425,30 +520,51 @@ def main(args):
         print("  download <id or paper name> <outputdir> -- Downloads data into the specified directory")
         return
     
-    curlist=os.listdir(args[1])
-    pathlist=[]
+    if protocolSet is None:
+        protocolSet=os.listdir(args[1])
     
-    for c in curlist:
-        pathlist.append(os.path.join(args[1], c))
+    pathlist=[]
+    # Store a set of IDs by requested protocol to make certain operations faster and easier.
+    idsByProto={'%s' % p: [] for p in protocolSet}
+    
+    for p in protocolSet:
+        modifiedList=[]
+        tmpList=os.listdir(os.path.join(args[1], p))
+        
+        idsByProto[p].extend(tmpList)
+        
+        for t in tmpList:
+            modifiedList.append(os.path.join(args[1], p, t))
+        
+        pathlist.extend(modifiedList)
     
     if args[2]=="listspecies":
         genSpeciesList(pathlist, seriesOnly)
     
+    elif args[2]=="listprotocols":
+        listProtocols(protocolSet)
+    
+    elif args[2]=="queryprotocol":
+        queryProtocol(args[1], args[3], idsByProto, seriesOnly)
+    
+    elif args[2]=="protocoloverlap":
+        protocolOverlap(args[1], protocolSet, seriesOnly, idsByProto)
+    
     elif args[2]=="findspecies":
         try:
-            findSpecies(pathlist, args[3], seriesOnly)
+            findSpecies(pathlist, args[3], seriesOnly, protocolSet)
         except:
             print("You must specify a species name.")
             
     elif args[2]=="getsummary":
         try:
-            getSummary(args[1], args[3:], pathlist)
+            getSummary(args[1], args[3:], pathlist, protocolSet)
         except:
             print("You must specify an element ID or paper name to get a summary.")
         
     elif args[2]=="fetchmatrices":
         try:
-            fetchMatrices(args[1], args[3:])
+            fetchMatrices(args[1], args[3:], protocolSet)
         except:
             print("You must specify an element ID to fetch its data matrices.")
     
@@ -462,13 +578,16 @@ def main(args):
         fetchMatrices(args[1], curlist)
         
     elif args[2]=="getsralist":
-        getSraList(args[1], args[3:], pathlist)
+        getSraList(args[1], args[3:], pathlist, protocolSet)
         
     elif args[2]=="getreadytosra":
         getReadyToSra(pathlist)
     
     elif args[2]=="getreadytodownload":
         getReadyToDownload(pathlist)
+        
+    elif args[2]=="download":
+        download(args[1], args[3], protocolSet)
         
     else:
         print("Unknown command: %s" % args[2])
