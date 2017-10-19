@@ -74,6 +74,8 @@ def main(args):
     if(verbose):
         log("[Message] Query successful!\n")
     
+    # Our first order of business after parsing the response should be writing a header to the output file:
+    out.write("QUERY %s\n" % query)
     root=searchTree.getroot()
     
     for child in root:
