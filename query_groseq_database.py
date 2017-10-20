@@ -464,6 +464,19 @@ def protocolOverlap(basedir, protocolSet, seriesOnly, idsByProto):
     # First step: determine which elements overlap by hammering the hell out of the idsByProto strucutre:
     # This implementation is... horribly, painfully inefficient.
     # TODO: Make this less awful.
+    
+    # So, what do we know about this data?
+    # 1. The lists are not sorted. Python can sort them in n*log(n) time.
+    # 2. There is likely some overlap.
+    #    We can mark every element that's been visited. This will reduce complexity by a fair deal, but
+    #    not much in an asymptotic sense.
+    # 3. ID numbers are unique in that separate projects or elements never map to the same ID.
+    # 4. A lot of performance could be gained by not comparing lists of strings vs integers.
+    visitedList=[]
+    
+    for p in protocolSet:
+        idsByProto[p].sort()
+    
     for p in protocolSet:
         plist=idsByProto[p]
         for q in protocolSet:
@@ -474,7 +487,8 @@ def protocolOverlap(basedir, protocolSet, seriesOnly, idsByProto):
             for r in plist:
                 for s in qlist:
                     if r==s:
-                        print("[%s] %s ----> [%s] %s" % (p, r, q, s))
+                        print("[%s] %s <----> [%s] %s" % (p, r, q, s))
+                        visitedList.append(r)
     
 
 def main(args):
