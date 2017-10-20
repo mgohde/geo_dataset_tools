@@ -1,5 +1,5 @@
 \documentclass[12pt,letterpaper]{article}
-
+\usepackage[margin=1in]{geometry}
 \begin{document}
 
 \title{GEO Dataset Tools Documentation}
@@ -7,5 +7,180 @@
 \maketitle
 
 \section{Introduction}
+The GEO Dataset Tools provide a set of utilities and functions that should make it relatively straightforward to 
+query the NIH's GEO database. Ultimately, the information gained from these tools should make it easier to download
+datasets and to collect information about how they were created.
+
+Currently, the tools present here are in a state of fairly heavy development, so any discrepancies between that which
+is documented here and the actual operation of the tools is likely due to recent changes to how they were designed.
+
+\section{Querying the GEO Database for Entries}
+The first step in the process of finding specific datasets to work with is to actually determine which datasets exist. 
+In the project directory, there exists a script named, `query\_geo.py'. Its purpose is to search the GEO dataset for various
+terms related to the protocols used for data collection and analysis. For example, it can be used to determine which entries
+in the GEO database were generated using GRO-Seq.
+
+When the script is invoked, it queries the GEO database with the specified search term or, ``gro-seq'' if none is specified. If the
+query is successful, it will proceed to either print or write a file containing a set of database element IDs corresponding to
+elements matching the query. With this set of IDs, it will be possible to invoke another script to fetch all of the found elements from GEO.
+This process will be detailed in the next section.
+
+\subsection{Invoking query\_geo.py}
+At the time of this writing, query\_geo can be invoked in the following ways:
+
+\begin{verbatim}
+Usage: ./query_geo.py <args> query
+Query the GEO database for numbers usable by fetch_groseq.py
+If the -o switch is not specified, it is recommended that this program's output
+be piped into either another command or a file.
+
+<args> may be one of the following:
+-h, --help      Prints this message.
+-o=<filename>   Writes to an output file instead of stdout.
+-v      Verbose output. All logging messages are written to stderr.
+
+Examples:
+./query_geo.py gro-seq >out.txt
+./query_geo.py -o=out.txt pro-seq
+\end{verbatim}
+
+Generally, the query parameter will correspond to a specific protocol, such as pro-seq, gro-seq, gro-cap, and 5'gro. In fact, the 
+database fetching software detailed later in this document expects that this is the case. However, it should be possible to 
+query the database for other features of interest, such as specific author names, species, etc.
+
+It should also be noted that all this script works best when its output is redirected to a separate file. This makes it easier to view
+debugging information when the `-v' parameter is specified. Also, the other scripts in this project expect to be able to read a file instead of
+receiving GEO database IDs from the command line. 
+
+Below is an example session used to demonstrate a series of queries made to the GEO database:
+\begin{verbatim}
+user@computer ~/geo_dataset_tools $ ./query_geo.py -o=groseq.txt -v gro-seq
+[Message] About to make query...
+[Message] Query successful!
+[Message] Found 1373 elements.
+[Message] Done.
+
+user@computer ~/geo_dataset_tools $ ./query_geo.py -o=proseq.txt -v pro-seq
+[Message] About to make query...
+[Message] Query successful!
+[Message] Found 106 elements.
+[Message] Done.
+
+user@computer ~/geo_dataset_tools $ ./query_geo.py -o=5gro.txt "5'gro"
+\end{verbatim}
+
+Note that the last command didn't print anything to the console. This is so because the `-v' parameter was not specified.
+
+Contents of an the `5gro.txt' file generated above:
+\begin{verbatim}
+QUERY 5'gro
+200068677
+200090035
+200083108
+200045914
+301678910
+301678908
+302396016
+302396015
+302193123
+301119600
+301119599
+\end{verbatim}
+
+\section{Generating a local metadata database}
+Once one or more sets of IDs has been obtained following the procedure outlined in the previous section, it's necessary to 
+generate and maintain a local cache of information from the GEO database. This is done for a number of reasons:
+    
+\begin{enumerate}
+ \item It's significantly faster than repeatedly querying an online database.
+ \item Keeping a local cache reduces the load on the GEO database servers.
+ \item Having a local database following strict formatting rules will enable more applications to be developed in the future.
+ \item Additional data can be associated with each element, such as data series matrices, etc.
+ \item This enables consistency in implementation and usage.
+\end{enumerate}
+
+In order to create this database, all that's necessary is to run the following command for all of the ID files fetched in the previous section:
+\begin{verbatim}
+user@computer ~/geo_dataset_tools $ ./make_groseq_database.py groseq.txt 
+    proseq.txt 5seq.txt grocap.txt db
+\end{verbatim}
+
+
+In the above example, the local database creation tool will read through every ID defined in all of the files specified, then store appropriate metadata in
+the directory specified. It is possible to specify any number of input files (as long as there is at least one), and more queries can be integrated into the
+same database directory after it is populated for the first time. In fact, it should also be possible to merge the same query back into the database at a future
+date. Doing so will allow any changed elements to be added, while existing elements will be updated if changes have been made.
+
+Full usage statement for the make\_groseq\_database script:
+\begin{verbatim}
+Usage: ./make_groseq_database.py idfile(s) dbdir
+Fetches project summaries and adds appropriate metadata to a database of GEO 
+GRO-Seq data.
+WARNING: This script may generate several thousand directories under dbdir.
+\end{verbatim}
+
+\section{Querying the local metadata database}
+Once enough metadata has been successfully fetched, it is possible to perform operations involving that metadata.
+In order to do so, it is necessary to invoke the `query\_groseq\_database.py' script in the project directory.
+
+The script's usage statement is listed below:
+\begin{verbatim}
+Usage: ./query_groseq_database.py [-s] dbdir command <args>
+Query a GRO-Seq metadata database fetched with make_groseq_database.py
+If -s is specified, then only series IDs will be reported on
+If -pt=<comma separated list of protocols> is specified, then only IDs 
+     with a specific protocol will be reported on.
+
+List of commands:
+  listprotocols -- List all protocols in the current database.
+  queryprotocol -- Print all elements matching a given protocol.
+  protocoloverlap -- Print out the set of elements that overlap between 
+       different protocols.
+  listspecies -- Print a listing of all species defined in the database.
+  findspecies <species name in quotes> -- Find all projects that match a 
+       given species.
+  getsummary <list of id numbers or paper names> -- Retrieves a summary for 
+       a given data element.
+  fetchmatrices <id> -- Downloads data matrices necessary to fetch data for 
+       a set.
+  fetchspmats <species name> -- Fetches all matrices for a given species.
+  fetchallmatrices -- Fetch as many matrix files as possible. This will be 
+       slow!
+  getsralist <id or paper name> -- Retrieves all SRAs for a given element 
+       given that matrices are present.
+  getreadytosra -- Retrieves a list of all projects with fetched matrix 
+       files.
+  getreadytodownload -- Retrieves a list of all projects that can be 
+       downloaded immediately.
+  download <id or paper name> <outputdir> -- Downloads data into the 
+       specified directory
+\end{verbatim}
+
+\subsection{listprotocols}
+This command lists the set of protocols defined in the database. This is actually the list of queries fed into the make\_groseq\_database script. 
+At the time of this writing, this command effectively just lists the contents of the database directory specified.
+
+\subsection{queryprotocol}
+This command fetches a list of all elements matching a given protocol. This list includes a set of ID numbers and human-readable titles provided by the GEO database.
+
+\subsection{protocoloverlap}
+This command causes query\_groseq\_database to attempt to find which elements are the same across protocols. Certain data series defined by GEO may have multiple protocols
+associated with them. Running protocoloverlap should make it easier to find out which datasets have which protocols associated with them. In the future, more commands
+like this one will be implemented.
+
+\subsection{listspecies}
+This command does as specified. It searches for and returns a list of all species defined in the dataset sorted by the frequency in which they were mentioned.
+At the time of this writing, it is noted that certain data series may specify multiple species. This situation still must be rectified.
+
+\subsection{findspecies}
+This command searches for all IDs matching the specified species. At the time of this writing, multiple species may be defined per data element. This situation 
+will be resolved or otherwise noted through program behavior in the future.
+
+\subsection{getsummary}
+This command prints a detailed summary for every ID or paper name specified. Individual IDs are to be separated by spaces. Eventually, wildcard and similar
+match support should be implemented.
+
+\subsection{fetchmatrices}
+This command fetches a set of data series matrices for the appropriate ID if they are defined in that ID's metadata. 
 
 \end{document}

@@ -460,35 +460,76 @@ def queryProtocol(basedir, protoName, idsByProto, seriesOnly):
         print("ERROR: Query failed for protocol %s. Is it shown by the listprotocols command?" % protoName)
 
 
+def genIntegerIdsByProto(protocolSet, idsByProto):
+    d={'%s' % p : [] for p in protocolSet}
+    
+    for p in protocolSet:
+        d[p].extend([int(v) for v in idsByProto[p]])
+        d[p].sort()
+    
+    return d
+
+
+def getCommonElements(A, B):
+    ctr1=0
+    ctr2=0
+    
+    outList=[]
+    
+    while ctr1<len(A) and ctr2<len(B):
+        if A[ctr1]>B[ctr2]:
+            ctr2+=1
+        elif A[ctr1]<B[ctr2]:
+            ctr1+=1
+        else:
+            outList.append(A[ctr1])
+            ctr1+=1
+            ctr2+=1
+    
+    return outList
+
+
+def genProtoTestingSet(numBits):
+    testSet=[]
+    
+    for i in range(pow(2, numBits)):
+        # Count the number of bits set in this value (IIRC, there's a clever bitwise way of doing this):
+        bitCount=0
+        bitsSet=[]
+        for j in range(numBits):
+            if (i&(1<<j))!=0:
+                bitCount+=1
+                bitsSet.append(j)
+        if bitCount==2:
+            testSet.append((bitsSet[0], bitsSet[1]))
+    return testSet
+
+
 def protocolOverlap(basedir, protocolSet, seriesOnly, idsByProto):
-    # First step: determine which elements overlap by hammering the hell out of the idsByProto strucutre:
-    # This implementation is... horribly, painfully inefficient.
-    # TODO: Make this less awful.
+    # This implementation should be significantly faster than the previous when input datasets get
+    # _very_ large. At the current dataset sizes used, it should probably be as fast if not slower.
+    # On the one hand, it performs a lot of operations. On the other, it eliminates a lot of string
+    # comparisons and should eventually prove to be O(n log n) bounded by sort time.
     
-    # So, what do we know about this data?
-    # 1. The lists are not sorted. Python can sort them in n*log(n) time.
-    # 2. There is likely some overlap.
-    #    We can mark every element that's been visited. This will reduce complexity by a fair deal, but
-    #    not much in an asymptotic sense.
-    # 3. ID numbers are unique in that separate projects or elements never map to the same ID.
-    # 4. A lot of performance could be gained by not comparing lists of strings vs integers.
-    visitedList=[]
+    # This generates a dictionary of sorted integer lists.
+    intDict=genIntegerIdsByProto(protocolSet, idsByProto)
+    matches=[]
     
-    for p in protocolSet:
-        idsByProto[p].sort()
+    testSet=genProtoTestingSet(len(protocolSet))
     
-    for p in protocolSet:
-        plist=idsByProto[p]
-        for q in protocolSet:
-            if p==q:
-                continue
-            qlist=idsByProto[q]
-            # Determine which IDs match:
-            for r in plist:
-                for s in qlist:
-                    if r==s:
-                        print("[%s] %s <----> [%s] %s" % (p, r, q, s))
-                        visitedList.append(r)
+    # This should actually be pretty efficient excluding the algorithm used to generate combinations for the testing set.
+    for t in testSet:
+        commonElems=getCommonElements(intDict[protocolSet[t[0]]], intDict[protocolSet[t[1]]])
+        matchList=[t]
+        matchList.extend(commonElems)
+        matches.append(matchList)
+    
+    for m in matches:
+        left=protocolSet[m[0][0]]
+        right=protocolSet[m[0][1]]
+        
+        for i in m[1:]:
+            print("[%s] %d <---> [%s] %d" % (left, i, right, i))
     
 
 def main(args):
@@ -544,13 +585,23 @@ def main(args):
     for p in protocolSet:
         modifiedList=[]
         tmpList=os.listdir(os.path.join(args[1], p))
+        newTmpList=[]
         
-        idsByProto[p].extend(tmpList)
+        # Filter out non-series IDs if necessary:
+        # (This is a bit of a kludge that will ultimately save a lot of hassle and time)
+        if seriesOnly:
+            for t in tmpList:
+                tPath=os.path.join(args[1], p, t)
+                if isSeries(tPath):
+                    pathlist.append(tPath)
+                    idsByProto[p].append(t)
         
-        for t in tmpList:
-            modifiedList.append(os.path.join(args[1], p, t))
-        
-        pathlist.extend(modifiedList)
+        else:
+            idsByProto[p].extend(tmpList)
+            for t in tmpList:
+                modifiedList.append(os.path.join(args[1], p, t))
+            
+            pathlist.extend(modifiedList)
     
     if args[2]=="listspecies":
         genSpeciesList(pathlist, seriesOnly)
