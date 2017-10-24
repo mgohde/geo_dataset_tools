@@ -156,8 +156,17 @@ def genProtoSetStr(protocolSet):
         retStr+=",%s" % p
     return retStr
 
-        
-def findSpecies(pathlist, speciesName, seriesOnly, protocolSet):
+
+def dumpLQF(foundList, lqf, paths=True):
+    for f in foundList:
+        # Give an ID instead of a full path:
+        if paths:
+            lqf.write("%s\n" % f.split('/')[-1])
+        else:
+            lqf.write("%s\n" % f)
+
+
+def findSpecies(pathlist, speciesName, seriesOnly, protocolSet, lqf):
     curFoundList=[]
     # Making this case-sensitive would just be cruel.
     upperName=speciesName.upper()
@@ -179,6 +188,9 @@ def findSpecies(pathlist, speciesName, seriesOnly, protocolSet):
     
     for c in curFoundList:
         printTitle(c)
+    
+    # Now dump the set to the last query file:
+    dumpLQF(curFoundList, lqf)
 
 
 def findProto(basedir, idNum, protocolSet):
@@ -267,7 +279,7 @@ def fetchMatrices(basedir, idlist, protocolSet):
             
             # Cache the paper's "name":
             f=open(os.path.join(basedir, p, i, "namecache.txt"), "w")
-            f.write(findContribNameData(os.path.join(matDir, os.listdir(matDir)[0])).strip())
+            f.write(findContribNameDate(os.path.join(matDir, os.listdir(matDir)[0])).strip())
             f.close()
             
         except:
@@ -334,8 +346,8 @@ def getSraList(basedir, idlist, pathList, protocolSet):
             
             # We now need to enumerate all SRAs defined in the FTP links:
             print("Fetching data from specified SRA index URLs (this may take a while)...")
-            p=Pool(500)
-            contentSet=p.map(sraHelper, sraURLlist)
+            pl=Pool(500)
+            contentSet=pl.map(sraHelper, sraURLlist)
             for c in contentSet:
                 lines=c.splitlines()
                 
@@ -360,7 +372,7 @@ def getSraList(basedir, idlist, pathList, protocolSet):
             print("ERROR: No matrices defined in %s" % matDir)
 
 
-def getReadyToSra(pathlist):
+def getReadyToSra(pathlist, lqf):
     readylist=[]
     for p in pathlist:
         if os.path.exists(os.path.join(p, "matrices")):
@@ -370,11 +382,14 @@ def getReadyToSra(pathlist):
     
     for r in readylist:
         printTitle(r)
+    
+    dumpLQF(readylist, lqf)
 
 
-def getReadyToDownload(pathlist):
+def getReadyToDownload(pathlist, lqf):
     print("The following elements have SRA list files:")
     numFound=0
+    outList=[]
     for p in pathlist:
         # Determine if there exists a .sralist file in this directory:
         contents=os.listdir(p)
@@ -385,11 +400,14 @@ def getReadyToDownload(pathlist):
                 if ctoks[1]=="sralist":
                     numFound+=1
                     printTitle(p)
+                    outList.append(p)
             except:
                 # Do nothing
                 pass
     
     print("\n%d of %d elements have SRA lists and can be immediately downloaded." % (numFound, len(pathlist)))
+    
+    dumpLQF(outList, lqf)
 
 
 def download(basedir, elem, outdir, protocolSet):
@@ -448,7 +466,7 @@ def genIdSet(idSet, basedir, protoName, seriesOnly):
     return outSet
 
 
-def queryProtocol(basedir, protoName, idsByProto, seriesOnly):
+def queryProtocol(basedir, protoName, idsByProto, seriesOnly, lqf):
     try:
         idset=genIdSet(idsByProto[protoName], basedir, protoName, seriesOnly)
         
@@ -456,6 +474,8 @@ def queryProtocol(basedir, protoName, idsByProto, seriesOnly):
         
         for i in idset:
             printTitle(os.path.join(basedir, protoName, i))
+        
+        dumpLQF(idset, lqf, False)
     except:
         print("ERROR: Query failed for protocol %s. Is it shown by the listprotocols command?" % protoName)
 
@@ -509,7 +529,7 @@ def protocolOverlap(basedir, protocolSet, seriesOnly, idsByProto):
     # This implementation should be significantly faster than the previous when input datasets get
     # _very_ large. At the current dataset sizes used, it should probably be as fast if not slower.
     # On the one hand, it performs a lot of operations. On the other, it eliminates a lot of string
-    # comparisons and should eventually prove to be O(n log n) bounded by sort time.
+    # comparisons and should eventually prove to be O(n log n) bounded by sort time... kinda.
     
     # This generates a dictionary of sorted integer lists.
     intDict=genIntegerIdsByProto(protocolSet, idsByProto)
@@ -530,16 +550,94 @@ def protocolOverlap(basedir, protocolSet, seriesOnly, idsByProto):
         
         for i in m[1:]:
             print("[%s] %d <---> [%s] %d" % (left, i, right, i))
+
+
+def getYear(contribYearStr):
+    yearToks=[c for c in contribYearStr if c>='0' and c<='9']
+    yearStr="".join(yearToks)
     
+    return yearStr
+
+
+def getContrib(contribYearStr):
+    nameToks=[c for c in contribYearStr if c>'9']
+    nameStr="".join(nameToks)
+    
+    return nameStr
+
+
+def getByYear(pathlist, yearName, lqf):
+    outList=[]
+    for p in pathlist:
+        # Only use elements for which there is a name cache file.
+        # TODO: Add support for raw matrix reading.
+        ncName=os.path.join(p, "namecache.txt")
+        if os.path.exists(ncName):
+            with open(ncName, "r") as ncFile:
+                ncContents=ncFile.read()
+                yearStr=getYear(ncContents)
+                
+                if yearStr==yearName:
+                    outList.append(p)
+    
+    for o in outlist:
+        printTitle(o)
+    
+    dumpLQF(outList, lqf)
+
+
+def getByContributor(pathlist, contribName, lqf):
+    contribName=contribName.upper()
+    outList=[]
+    for p in pathlist:
+        # Only use elements for which there is a name cache file.
+        # TODO: Add support for raw matrix reading.
+        ncName=os.path.join(p, "namecache.txt")
+        if os.path.exists(ncName):
+            with open(ncName, "r") as ncFile:
+                ncContents=ncFile.read()
+                nameStr=getContrib(ncContents).upper()
+                
+                if nameStr==contribName:
+                    outList.append(p)
+    
+    for o in outList:
+        printTitle(o)
+    
+    dumpLQF(outList, lqf)
+
+
+def listYearContrib(pathlist, getFunction, getName):
+    ycDict={}
+    for p in pathlist:
+        ncName=os.path.join(p, "namecache.txt")
+        if os.path.exists(ncName):
+            with open(ncName, "r") as ncFile:
+                ncContents=ncFile.read()
+                val=getFunction(ncContents)
+                if ycDict.get(val) is None:
+                    # add to the dict
+                    ycDict.update({val: 1})
+                else:
+                    ycDict[val]+=1
+    # Count all elements:
+    ycList=ycDict.items()
+    ycList=sorted(ycList, key=lambda k: k[1], reverse=True)
+    print("%s, frequency:" % getName)
+    for y in ycList:
+        if len(y[0])>1:
+            print("%s %d" % (y[0], y[1]))
+
 
 def main(args):
     progName=args[0]
     seriesOnly=False
-    
+    lastQueryName=".lastquery"
     protocolSet=None
     
     # This kludge allows for switches to be specified without disrupting any other behavior.
     newArgs=[]
+    newCommandArgs=[]
     if len(args)!=1:
         for a in args:
             aToks=a.split("=")
@@ -548,16 +646,39 @@ def main(args):
                 #args=args[1:]
             elif aToks[0]=="-pt":
                 protocolSet=aToks[1].split(',')
+            elif aToks[0]=="-lq" or aToks[0]=="--last-query":
+                if len(aToks)>1:
+                    for a in aToks[1:]:
+                        if os.path.exists(a):
+                            with open(a, "r") as lqf:
+                                contents=lqf.read()
+                                lines=contents.splitlines()
+                                newCommandArgs.extend([l.strip() for l in lines])
+                        else:
+                            print("NOTE: Could not honor %s as last query file not found!" % aToks[0])
+                elif os.path.exists(".lastquery"):
+                    with open(".lastquery", "r") as lqf:
+                        contents=lqf.read()
+                        lines=contents.splitlines()
+                        newCommandArgs=[l.strip() for l in lines]
+                else:
+                    print("NOTE: Could not honor %s as last query file not found!" % aToks[0])
+            elif aToks[0]=="-qf":
+                lastQueryName=aToks[1]
             else:
                 newArgs.append(a)
         args=newArgs
-                
+        args.extend(newCommandArgs)
+        
         
     if len(args)<3:
         print("Usage: %s [-s] dbdir command <args>" % progName)
         print("Query a GRO-Seq metadata database fetched with make_groseq_database.py")
         print("If -s is specified, then only series IDs will be reported on")
-        print("If -pt=<comma separated list of protocols> is specified, then only IDs with a specific protocol will be reported on.")
+        print("If -pt=<comma separated list of protocols> is specified, then only IDs with a ")
+        print("     specific protocol will be reported on.")
+        print("If -lq or --last-query is specified, then the program will attempt to read as ")
+        print("     arguments the results of the last query.")
         print("")
         print("List of commands:")
         print("  listprotocols -- List all protocols in the current database.")
@@ -572,6 +693,12 @@ def main(args):
         print("  getsralist <id or paper name> -- Retrieves all SRAs for a given element given that matrices are present.")
         print("  getreadytosra -- Retrieves a list of all projects with fetched matrix files.")
         print("  getreadytodownload -- Retrieves a list of all projects that can be downloaded immediately.")
+        print("  getbyyear <year> -- Retrieves a list of all projects with downloaded series matrices by year posted.")
+        print("  getbycontrib <contributor name> -- Retrieves a list of all projects with downloaded series matrices")
+        print("  listyears -- List all years appearing in data matrices.")
+        print("  listcontribs -- List all contributors appearing in data matrices.")
+        print("       by the first contributor.")
+        #print("  qfunion <list of query files and/or ID numbers> -- Generates the union of the given set of IDs.")
         print("  download <id or paper name> <outputdir> -- Downloads data into the specified directory")
         return
     
@@ -603,6 +730,8 @@ def main(args):
             
             pathlist.extend(modifiedList)
     
+    lastQueryFile=open(lastQueryName, "w")
+    
     if args[2]=="listspecies":
         genSpeciesList(pathlist, seriesOnly)
     
@@ -610,14 +739,14 @@ def main(args):
         listProtocols(protocolSet)
     
     elif args[2]=="queryprotocol":
-        queryProtocol(args[1], args[3], idsByProto, seriesOnly)
+        queryProtocol(args[1], args[3], idsByProto, seriesOnly, lastQueryFile)
     
     elif args[2]=="protocoloverlap":
         protocolOverlap(args[1], protocolSet, seriesOnly, idsByProto)
     
     elif args[2]=="findspecies":
         try:
-            findSpecies(pathlist, args[3], seriesOnly, protocolSet)
+            findSpecies(pathlist, args[3], seriesOnly, protocolSet, lastQueryFile)
         except:
             print("You must specify a species name.")
             
@@ -646,16 +775,30 @@ def main(args):
         getSraList(args[1], args[3:], pathlist, protocolSet)
         
     elif args[2]=="getreadytosra":
-        getReadyToSra(pathlist)
+        getReadyToSra(pathlist, lastQueryFile)
     
     elif args[2]=="getreadytodownload":
-        getReadyToDownload(pathlist)
+        getReadyToDownload(pathlist, lastQueryFile)
         
     elif args[2]=="download":
         download(args[1], args[3], protocolSet)
+    
+    elif args[2]=="getbyyear":
+        getByYear(pathlist, args[3], lastQueryFile)
+    
+    elif args[2]=="getbycontributor":
+        getByContributor(pathlist, args[3], lastQueryFile)
+    
+    elif args[2]=="listyears":
+        listYearContrib(pathlist, getYear, "Publication Year")
+    
+    elif args[2]=="listcontribs":
+        listYearContrib(pathlist, getContrib, "First Contributor")
         
     else:
         print("Unknown command: %s" % args[2])
+    
+    lastQueryFile.close()
 
 
 if __name__=="__main__":

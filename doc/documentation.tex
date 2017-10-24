@@ -156,6 +156,24 @@ List of commands:
        specified directory
 \end{verbatim}
 
+\subsection{An explanation of the `-s' and `-pt' command line arguments}
+As documented, every command implemented in `query\_groseq\_database' is designed to work with one of the following sets of 
+elements:
+\begin{enumerate}
+ \item Every element present in the database.
+ \item A specific set of elements explicitly listed by the user.
+ \item A specific element explicitly listed by the user.
+\end{enumerate}
+
+The first case in particular is extremely limited in that it will often present quite a bit of unwanted data for every given query. For example,
+a query based on species name will include both collections of data and every entry for every data element in each collection.
+
+The `-s' and `-pt' command line arguments reduce the size of the input set that query commands work on by allowing the user to specify specific
+additional attributes for what they would like to find. As such, the `-s' command limits all queries to just the set of defined collections, rather than 
+the elements making them up. The `-pt' command similarly allows users to search for data collected under specific protocols.
+
+Eventually, support for more flags will be implemented so that users can easily pass the results of one query into another.
+
 \subsection{listprotocols}
 This command lists the set of protocols defined in the database. This is actually the list of queries fed into the make\_groseq\_database script. 
 At the time of this writing, this command effectively just lists the contents of the database directory specified.
@@ -181,6 +199,33 @@ This command prints a detailed summary for every ID or paper name specified. Ind
 match support should be implemented.
 
 \subsection{fetchmatrices}
-This command fetches a set of data series matrices for the appropriate ID if they are defined in that ID's metadata. 
+This command fetches a set of data series matrices for the appropriate ID if they are defined in that ID's metadata. Please note that this command requires that series matrices
+be defined for the given data element. While almost every element has an associated matrix, you can check for whether one can be fetched by checking for the "Data matrix URL defined?"
+field on running the getsummary command. If "YES" is printed next to the field, then matrices can be fetched. Otherwise, no data matrices have been defined for the current element
+and thus cannot be fetched.
 
+One side effect of having fetched series matrices for a given element is that every future listing for that element by other commands will contain a ``paper name.''
+This is a string consisting of the last name of the first contributor to the element's project along with the date that the element was posted to GEO. Please
+note that publication years for papers and the dates at which their associated data was submitted to GEO may differ.
+
+\subsection{fetchspmats}
+This command was implemented to make it easier to fetch all data matrices for a given species. It is equivalent to running the `findspecies' command, then running
+`fetchmatrices' for every result returned.
+
+\subsection{fetchallmatrices}
+This command attempts to fetch every series matrix file associated with every element in the database. Please note that due to the intensive nature of this command,
+it may take a very long time to complete and lacks much formal validation.
+
+\subsection{getsralist}
+If data series matrices have been successfully fetched for a given element, then this command looks up the SRA ID numbers for every data file associated
+with that element.
+
+\subsection{getreadytosra}
+This command is a convenient way of listing every project for which series matrices have been fetched.
+
+\subsection{getreadytodownload}
+This command lists all elements on which `getsralist' has been run.
+
+\subsection{download}
+This command downloads the set of SRA files found by the `getsralist' command into the directory specified on the command line.
 \end{document}
