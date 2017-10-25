@@ -125,38 +125,36 @@ In order to do so, it is necessary to invoke the `query\_groseq\_database.py' sc
 
 The script's usage statement is listed below:
 \begin{verbatim}
-Usage: ./query_groseq_database.py [-s] dbdir command <args>
+Usage: ./query_groseq_database.py [-s,-pt,-lq] dbdir command <args>
 Query a GRO-Seq metadata database fetched with make_groseq_database.py
 If -s is specified, then only series IDs will be reported on
-If -pt=<comma separated list of protocols> is specified, then only IDs 
-     with a specific protocol will be reported on.
+If -pt=<comma separated list of protocols> is specified, then only IDs with a 
+     specific protocol will be reported on.
+If -lq or --last-query is specified, then the program will attempt to read as 
+     arguments the results of the last query.
 
 List of commands:
   listprotocols -- List all protocols in the current database.
   queryprotocol -- Print all elements matching a given protocol.
-  protocoloverlap -- Print out the set of elements that overlap between 
-       different protocols.
+  protocoloverlap -- Print out the set of elements that overlap between different protocols.
   listspecies -- Print a listing of all species defined in the database.
-  findspecies <species name in quotes> -- Find all projects that match a 
-       given species.
-  getsummary <list of id numbers or paper names> -- Retrieves a summary for 
-       a given data element.
-  fetchmatrices <id> -- Downloads data matrices necessary to fetch data for 
-       a set.
+  findspecies <species name in quotes> -- Find all projects that match a given species.
+  getsummary <list of id numbers or paper names> -- Retrieves a summary for a given data element.
+  fetchmatrices <id> -- Downloads data matrices necessary to fetch data for a set.
   fetchspmats <species name> -- Fetches all matrices for a given species.
-  fetchallmatrices -- Fetch as many matrix files as possible. This will be 
-       slow!
-  getsralist <id or paper name> -- Retrieves all SRAs for a given element 
-       given that matrices are present.
-  getreadytosra -- Retrieves a list of all projects with fetched matrix 
-       files.
-  getreadytodownload -- Retrieves a list of all projects that can be 
-       downloaded immediately.
-  download <id or paper name> <outputdir> -- Downloads data into the 
-       specified directory
+  fetchallmatrices -- Fetch as many matrix files as possible. This will be slow!
+  getsralist <id or paper name> -- Retrieves all SRAs for a given element given that matrices are present.
+  getreadytosra -- Retrieves a list of all projects with fetched matrix files.
+  getreadytodownload -- Retrieves a list of all projects that can be downloaded immediately.
+  getbyyear <year> -- Retrieves a list of all projects with downloaded series matrices by year posted.
+  getbycontrib <contributor name> -- Retrieves a list of all projects with downloaded series matrices
+  listyears -- List all years appearing in data matrices.
+  listcontribs -- List all contributors appearing in data matrices.
+       by the first contributor.
+  download <id or paper name> <outputdir> -- Downloads data into the specified directory
 \end{verbatim}
 
-\subsection{An explanation of the `-s' and `-pt' command line arguments}
+\subsection{An explanation of the `-s', `-pt' and `-lq' command line arguments}
 As documented, every command implemented in `query\_groseq\_database' is designed to work with one of the following sets of 
 elements:
 \begin{enumerate}
@@ -172,7 +170,9 @@ The `-s' and `-pt' command line arguments reduce the size of the input set that 
 additional attributes for what they would like to find. As such, the `-s' command limits all queries to just the set of defined collections, rather than 
 the elements making them up. The `-pt' command similarly allows users to search for data collected under specific protocols.
 
-Eventually, support for more flags will be implemented so that users can easily pass the results of one query into another.
+`-lq' works somewhat differently from `-s' and `-pt'. It is used to specify that the list of IDs or paper names normally required of certain commands like `search'
+are instead to be found in either a special file created after every query or in a named file specified by the user. Instead of modifying the set of elements
+to be iterated over when doing a search, it appends the contents of the file to the arguments list passed to the program.
 
 \subsection{listprotocols}
 This command lists the set of protocols defined in the database. This is actually the list of queries fed into the make\_groseq\_database script. 
@@ -228,4 +228,261 @@ This command lists all elements on which `getsralist' has been run.
 
 \subsection{download}
 This command downloads the set of SRA files found by the `getsralist' command into the directory specified on the command line.
+
+\subsection{getbyyear}
+This command lists all elements posted to GEO in the specified year. Please note that the only way to determine the year of publication is to fetch the set of 
+series matrix files associated with a given entry.
+
+\subsection{listyears}
+This command searches through all data elements for which series matrices have been downloaded to produce a set of publication years and their frequencies. 
+This is useful when determining the set of publication years to pass to `getbyyear'.
+
+\subsection{getbycontrib}
+This command works in much the same way as `getbyyear', except it searches by the last name of the first contributor.
+
+\subsection{listcontribs}
+This command works in much the same way as `listyears', except it produces a set of contributor names and their frequencies. Please note that it only considers
+the name of the first contributor for any given project, though it may, in the future, search through all contributors.
+
+\subsection{examples}
+This subsection shows a number of examples that should demonstrate how `query\_groseq\_database' is used in practice.
+For all of the examples listed, the database is stored in a directory named `db'.
+
+The following is an example of a simple query listing all species in the database. Please note that the `-s' flag has been specified, so
+only GEO series entries are searched for.
+\begin{verbatim}
+user@computer-$ ./query_groseq_database.py -s db listspecies
+List of available species:
+125 Homo sapiens
+62 Mus musculus
+24 Drosophila melanogaster
+10 Caenorhabditis elegans
+4 Rattus norvegicus
+3 Pan troglodytes
+3 Macaca mulatta
+2 Saccharomyces cerevisiae
+2 Arabidopsis thaliana
+1 Zea mays
+1 Tetrahymena thermophila
+1 Sus scrofa
+1 Schizosaccharomyces pombe
+1 Plasmodium falciparum
+1 Canis lupus familiaris
+
+Total number of elements: 241
+\end{verbatim}
+
+The following is like the above query, but only for gro-seq data:
+\begin{verbatim}
+user@computer-$ ./query_groseq_database.py -s -pt="gro-seq" db listspecies
+List of available species:
+99 Homo sapiens
+57 Mus musculus
+18 Drosophila melanogaster
+7 Caenorhabditis elegans
+2 Rattus norvegicus
+1 Zea mays
+1 Tetrahymena thermophila
+1 Sus scrofa
+1 Saccharomyces cerevisiae
+1 Plasmodium falciparum
+1 Pan troglodytes
+1 Macaca mulatta
+1 Arabidopsis thaliana
+
+Total number of elements: 191
+\end{verbatim}
+
+The following is a listing of all entries for Rattus norvegicus. Note once again
+that all non-series entries have been filtered out:
+\begin{verbatim}
+user@computer-$ ./query_groseq_database.py -s db findspecies "Rattus norvegicus"
+Found 4 elements that match "Rattus norvegicus" given protocol(s) 5'gro,pro-seq,gro-cap,gro-seq
+List of paths:
+
+[pro-seq] 200085337: Natural Selection has Shaped Coding and Non-coding Transcription in Primate CD4+ T-cells
+
+[pro-seq] "Mishmar2016" 200085747: Initiation of mtDNA transcription is followed by pausing, and diverge across human cell types and during evolution
+
+[gro-seq] 200085747: Initiation of mtDNA transcription is followed by pausing, and diverge across human cell types and during evolution
+
+[gro-seq] 200058009: Required Enhancer: Matrin-3 Structure Interactions for Homeodomain Transcription Programs
+\end{verbatim}
+
+The above query generated a hidden file named `.lastquery'. This file contains the list of IDs found in a search query. Note that the set
+of IDs shown matches the set mentioned in the previous example:
+\begin{verbatim}
+200085337
+200085747
+200085747
+200058009
+\end{verbatim}
+
+This is an example using the `.lastquery' file listed before. It generates a listing of summaries for all of the elements specified within the file.
+It is also possible to specify additional paper names or element IDs for consideration:
+\begin{verbatim}
+user@computer-$ ./query_groseq_database.py -lq -s db getsummary
+----Summary for 200085337----
+Title: Natural Selection has Shaped Coding and Non-coding Transcription in Primate CD4+ T-cells
+Posted: 2016/12/29
+Accession nr: GSE85337
+Species: Pan troglodytes; Rattus norvegicus; Mus musculus; Macaca mulatta; Homo sapiens
+Entry Type: GSEMatrix URL/FTP Link: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE85nnn/GSE85337/
+Summary (begins on next line):
+Transcriptional regulatory changes have been shown to contribute to phenotypic differences between species, but many questions remain about how gene expression evolves. Here we report the first comparative study of nascent transcription in primates. We used PRO-seq to map actively transcribing RNA polymerases in resting and activated CD4+ T-cells in multiple human, chimpanzee, and rhesus macaque individuals, with rodents as outgroups. This approach allowed us to directly measure active transcription separately from post-transcriptional processes. We observed general conservation in coding and non-coding transcription, punctuated by numerous differences between species, particularly at distal enhancers and non-coding RNAs. Transcription factor binding sites are a primary determinant of transcriptional differences between species. We found evidence for stabilizing selection on gene expression levels and adaptive substitutions associated with lineage-specific transcription. Finally, rates of evolutionary change are strongly correlated with long-range chromatin interactions. These observations clarify the role of primary transcription in regulatory evolution.
+
+Data matrix URL defined? YES
+Ready to fetch data? NO (run fetchmatrices 200085337)
+Data fetched? NO
+Protocol: pro-seq
+
+----Summary for 200085747----
+Title: Initiation of mtDNA transcription is followed by pausing, and diverge across human cell types and during evolution
+Posted: 2016/09/30
+Accession nr: GSE85747
+Species: Macaca mulatta; Homo sapiens; Caenorhabditis elegans; Drosophila melanogaster; Pan troglodytes; Rattus norvegicus; Mus musculus
+Entry Type: GSEMatrix URL/FTP Link: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE85nnn/GSE85747/
+Summary (begins on next line):
+We analyzed nascent mtDNA-encoded RNA transcripts from GRO-seq and PRO-seq experiments in a collection of diverse human cell lines and Metazoan organisms. Accurate detection of human mtDNA transcription initiation sites (TIS) in the heavy and light strands revealed a novel transcription pausing site near the light strand TIS, upstream to the transcription-replication transition region, in conserved sequence block III (CSBIII). The transcription pausing index varied quantitatively among the cell lines. In addition to the human cell lines experiments, our experiments and analysis of non-human organisms enabled detection of previously unknown mtDNA TIS, pausing, and transcription termination sites with unprecedented accuracy. Whereas mammals (chimpanzee, rhesus macaque, rat, and mouse) showed a human-like mtDNA transcription pattern, the invertebrate pattern (Drosophila and C. elegans) profoundly diverged.
+
+Data matrix URL defined? YES
+Ready to fetch data? YES
+Data fetched? NO
+Protocol: pro-seq
+
+----Summary for 200085747----
+Title: Initiation of mtDNA transcription is followed by pausing, and diverge across human cell types and during evolution
+Posted: 2016/09/30
+Accession nr: GSE85747
+Species: Macaca mulatta; Homo sapiens; Caenorhabditis elegans; Drosophila melanogaster; Pan troglodytes; Rattus norvegicus; Mus musculus
+Entry Type: GSEMatrix URL/FTP Link: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE85nnn/GSE85747/
+Summary (begins on next line):
+We analyzed nascent mtDNA-encoded RNA transcripts from GRO-seq and PRO-seq experiments in a collection of diverse human cell lines and Metazoan organisms. Accurate detection of human mtDNA transcription initiation sites (TIS) in the heavy and light strands revealed a novel transcription pausing site near the light strand TIS, upstream to the transcription-replication transition region, in conserved sequence block III (CSBIII). The transcription pausing index varied quantitatively among the cell lines. In addition to the human cell lines experiments, our experiments and analysis of non-human organisms enabled detection of previously unknown mtDNA TIS, pausing, and transcription termination sites with unprecedented accuracy. Whereas mammals (chimpanzee, rhesus macaque, rat, and mouse) showed a human-like mtDNA transcription pattern, the invertebrate pattern (Drosophila and C. elegans) profoundly diverged.
+
+Data matrix URL defined? YES
+Ready to fetch data? YES
+Data fetched? NO
+Protocol: pro-seq
+
+----Summary for 200058009----
+Title: Required Enhancer: Matrin-3 Structure Interactions for Homeodomain Transcription Programs
+Posted: 2014/08/03
+Accession nr: GSE58009
+Species: Rattus norvegicus
+Entry Type: GSEMatrix URL/FTP Link: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE58nnn/GSE58009/
+Summary (begins on next line):
+Study of the POU-homeodomain transcription factor, has revealed that, binding of Pit1-occupied enhancers to a nuclear matrin-3-rich network/architecture is a key event in effective activation of the Pit1-regulated enhancer / coding gene transcriptional program.
+
+Data matrix URL defined? YES
+Ready to fetch data? NO (run fetchmatrices 200058009)
+Data fetched? NO
+Protocol: gro-seq
+\end{verbatim}
+
+The following is an example of a query for which the user wishes to store results in a specific file:
+\begin{verbatim}
+user@computer-$ ./query_groseq_database.py -qf=query.txt -s db getbyyear 2015
+[gro-seq] "Yu2015" 200071369: Panoramix enforces piRNA-dependent co-transcriptional silencing (GRO-Seq)
+
+[gro-seq] "Fuda2015" 200058955: GAGA Factor maintains promoters in nucleosome-free conformation and allows promoter-proximal pausing [GRO-seq]
+
+[gro-seq] "Shilatifard2015" 200070408: PAF1, a molecular regulator of promoter-proximal pausing by RNA Polymerase II
+
+[gro-seq] "Fuda2015" 200058956: GAGA Factor maintains promoters in nucleosome-free conformation and allows promoter-proximal pausing [MNase]
+
+[gro-seq] "Fuda2015" 200058957: GAGA Factor maintains promoters in nucleosome-free conformation and allows promoter-proximal pausing
+\end{verbatim}
+
+Once again, summaries are fetched given the query file specified:
+\begin{verbatim}
+user@computer-$ ./query_groseq_database.py -lq=query.txt -s db getsummary
+----Summary for 200071369----
+Title: Panoramix enforces piRNA-dependent co-transcriptional silencing (GRO-Seq)
+Posted: 2015/10/15
+Accession nr: GSE71369
+Species: Drosophila melanogaster
+Entry Type: GSEMatrix URL/FTP Link: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE71nnn/GSE71369/
+Summary (begins on next line):
+The Piwi-interacting RNA (piRNA) pathway is a small RNA-based innate immune system that defends germ cell genomes against transposons. In Drosophila ovaries, the nuclear Piwi protein is required for transcriptional silencing of transposons, though the precise mechanisms by which this occurs are unknown. Here we show that CG9754 is a component of Piwi complexes that functions downstream of Piwi and its binding partner, Asterix, in transcriptional silencing. Enforced tethering of CG9754 protein to nascent mRNA transcripts causes co-transcriptional silencing of the source locus and the deposition of repressive chromatin marks. We have named CG9754 Panoramix, and propose that this protein could act as an adaptor, scaffolding interactions between the piRNA pathway and the general silencing machinery that it recruits to enforce transcriptional repression.
+
+Data matrix URL defined? YES
+Ready to fetch data? YES
+Data fetched? NO
+Protocol: gro-seq
+
+----Summary for 200058955----
+Title: GAGA Factor maintains promoters in nucleosome-free conformation and allows promoter-proximal pausing [GRO-seq]
+Posted: 2015/04/04
+Accession nr: GSE58955
+Species: Drosophila melanogaster
+Entry Type: GSEMatrix URL/FTP Link: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE58nnn/GSE58955/
+Summary (begins on next line):
+Promoter-proximal pausing of RNA polymerase II (Pol II) is a widespread in higher eukaryotes. Previous studies have shown that GAF is enriched at paused genes, but the role of GAF in pausing has not been well characterized on a genome-wide level. To investigate the role of GAF in pausing, we RNAi-depleted GAF from Drosophila S2 cells, and examined the effects on promoter-proximal polymerase. We confirmed the importance of GAF for pausing on the classic pause model gene Hsp70. To determine the dependence of pausing on GAF genome-wide, we assayed the levels of transcriptionally-engaged polymerase genome-wide using GRO-seq in control and GAF-RNAi cells. We found that promoter-proximal polymerase was significantly reduced on a subset of paused genes with GAF-bound promoters. There is a dramatic change in nucleosome distribution at genes with reduction in pausing upon GAF depletion and intergenic GAF binding sites in GAF knock-down, suggesting that GAF allows the establishment of pausing at these genes by directing nucleosome displacement off of the promoter. In addition, the insulator factor BEAF, BEAF-interacting protein Chriz, and transcription M1BP enrichment on unaffected genes suggests that redundant transcription factors or insulators protect other GAF-bound paused genes from GAF knock-down effects.
+
+Data matrix URL defined? YES
+Ready to fetch data? YES
+Data fetched? NO
+Protocol: gro-seq
+
+----Summary for 200070408----
+Title: PAF1, a molecular regulator of promoter-proximal pausing by RNA Polymerase II
+Posted: 2015/08/13
+Accession nr: GSE70408
+Species: Homo sapiens; Drosophila melanogaster
+Entry Type: GSEMatrix URL/FTP Link: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE70nnn/GSE70408/
+Summary (begins on next line):
+The control of promoter-proximal pausing and the release of RNA polymerase II (RNA Pol II) is a widely used mechanism for regulating gene expression in metazoans, especially for genes that respond to environmental and developmental cues. Here, we identify Pol II associated Factor 1 (PAF1) as a major regulator of promoter-proximal pausing. Knockdown of PAF1 leads to increased release of paused Pol II into gene bodies at thousands of genes. Genes with the highest levels of paused Pol II exhibit the largest redistribution of Pol II from the promoter-proximal region into the gene body in the absence of PAF1. PAF1 depletion results in increased nascent transcription and increased levels of phosphorylation of Pol II’s c-terminal domain on serine 2 (Ser2P). These changes can be explained by the recruitment of the Ser2P kinase Super Elongation Complex (SEC) effecting increased release of paused Pol II into productive elongation, thus establishing a novel function for PAF1 as a major regulator of pausing in metazoans.
+
+Data matrix URL defined? YES
+Ready to fetch data? YES
+Data fetched? NO
+Protocol: gro-seq
+
+----Summary for 200058956----
+Title: GAGA Factor maintains promoters in nucleosome-free conformation and allows promoter-proximal pausing [MNase]
+Posted: 2015/04/04
+Accession nr: GSE58956
+Species: Drosophila melanogaster
+Entry Type: GSEMatrix URL/FTP Link: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE58nnn/GSE58956/
+Summary (begins on next line):
+Promoter-proximal pausing of RNA polymerase II (Pol II) is a widespread in higher eukaryotes. Previous studies have shown that GAF is enriched at paused genes, but the role of GAF in pausing has not been well characterized on a genome-wide level. To investigate the role of GAF in pausing, we RNAi-depleted GAF from Drosophila S2 cells, and examined the effects on promoter-proximal polymerase. We confirmed the importance of GAF for pausing on the classic pause model gene Hsp70. To determine the dependence of pausing on GAF genome-wide, we assayed the levels of transcriptionally-engaged polymerase genome-wide using GRO-seq in control and GAF-RNAi cells. We found that promoter-proximal polymerase was significantly reduced on a subset of paused genes with GAF-bound promoters. There is a dramatic change in nucleosome distribution at genes with reduction in pausing upon GAF depletion and intergenic GAF binding sites in GAF knock-down, suggesting that GAF allows the establishment of pausing at these genes by directing nucleosome displacement off of the promoter. In addition, the insulator factor BEAF, BEAF-interacting protein Chriz, and transcription M1BP enrichment on unaffected genes suggests that redundant transcription factors or insulators protect other GAF-bound paused genes from GAF knock-down effects.
+
+Data matrix URL defined? YES
+Ready to fetch data? YES
+Data fetched? NO
+Protocol: gro-seq
+
+----Summary for 200058957----
+Title: GAGA Factor maintains promoters in nucleosome-free conformation and allows promoter-proximal pausing
+Posted: 2015/04/04
+Accession nr: GSE58957
+Species: Drosophila melanogaster
+Entry Type: GSEMatrix URL/FTP Link: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE58nnn/GSE58957/
+Summary (begins on next line):
+This SuperSeries is composed of the SubSeries listed below.
+
+Data matrix URL defined? YES
+Ready to fetch data? YES
+Data fetched? NO
+Protocol: gro-seq
+\end{verbatim}
+
+The following uses lastquery to fetch every pro-seq entry for Drosophila melanogaster:
+\begin{verbatim}
+user@computer-$ ./query_groseq_database.py -pt=pro-seq db findspecies "Drosophila melanogaster"
+Found 5 elements that match "Drosophila melanogaster" given protocol(s) pro-seq
+List of paths:
+<cut>
+
+user@computer-$ ./query_groseq_database.py -lq db fetchmatrices
+Done with 200077607.
+<cut>
+Done with 200085747.
+<cut>
+Done with 200042397.
+<cut>
+Done with 200042117.
+<cut>
+Done with 200081649.
+\end{verbatim}
 \end{document}

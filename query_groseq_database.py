@@ -580,7 +580,7 @@ def getByYear(pathlist, yearName, lqf):
                 if yearStr==yearName:
                     outList.append(p)
     
-    for o in outlist:
+    for o in outList:
         printTitle(o)
     
     dumpLQF(outList, lqf)
@@ -672,13 +672,15 @@ def main(args):
         
         
     if len(args)<3:
-        print("Usage: %s [-s] dbdir command <args>" % progName)
+        print("Usage: %s [-s,-pt,-lq] dbdir command <args>" % progName)
         print("Query a GRO-Seq metadata database fetched with make_groseq_database.py")
         print("If -s is specified, then only series IDs will be reported on")
         print("If -pt=<comma separated list of protocols> is specified, then only IDs with a ")
         print("     specific protocol will be reported on.")
         print("If -lq or --last-query is specified, then the program will attempt to read as ")
         print("     arguments the results of the last query.")
+        print("If -qf is specified, then the program will attempt to store the result of the")
+        print("     current query in the file specified.")
         print("")
         print("List of commands:")
         print("  listprotocols -- List all protocols in the current database.")
