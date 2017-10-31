@@ -200,6 +200,32 @@ def findProto(basedir, idNum, protocolSet):
     return None
 
 
+def printSRAList(matrixdir):
+    # Let's attempt to find all SRAs defined for this matrix:
+    for filename in os.listdir(matrixdir):
+        f=open(os.path.join(matrixdir, filename), "r")
+        eTree=ETree.parse(f)
+        f.close()
+        
+        # Attempt to find series IDs:
+        root=eTree.getroot()
+        
+        elemCount=0
+        for elem in root:
+            if elem.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Sample":
+                elemCount+=1
+                # Let's get some additional metadata for the sample:
+                sampleGeo=elem.attrib['iid']
+                sampleStrategy=""
+                sampleRelation=""
+                for child in elem:
+                    if child.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Library-Strategy":
+                        sampleStrategy=child.text
+                    elif child.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Relation":
+                        if child.attrib['type']=="SRA":
+                            sampleRelation=child.attrib['target']
+                print("%s %s %s" % (sampleGeo, sampleStrategy, sampleRelation))
+
 def getSummary(basedir, idlist, pathList, protocolSet):
     for i in idlist:
         try:
@@ -220,6 +246,10 @@ def getSummary(basedir, idlist, pathList, protocolSet):
             f.close()
             
             print("----Summary for %s----" % i)
+            if os.path.exists(os.path.join(curdir, "namecache.txt")):
+                with open(os.path.join(curdir, "namecache.txt")) as nc:
+                    ncc=nc.read()
+                    print("Shorthand Title: %s" % ncc.strip())
             print(contents)
             
             print("")
@@ -232,6 +262,9 @@ def getSummary(basedir, idlist, pathList, protocolSet):
             if os.path.exists(os.path.join(curdir, "matrices")):
                 print("Ready to fetch data? YES")
                 # TODO: Add additional information as appropriate based on the matrix files.
+                
+                print("The following data elements were found in series matrices:")
+                printSRAList(os.path.join(curdir, "matrices"))
             else:
                 print("Ready to fetch data? NO (run fetchmatrices %s)" % i)
             
@@ -629,6 +662,33 @@ def listYearContrib(pathlist, getFunction, getName):
             print("%s %d" % (y[0], y[1]))
 
 
+def getByAccession(pathList, accessionList, lqf):
+    outlist=[]
+    for a in accessionList:
+        for p in pathList:
+            accession=None
+            if os.path.exists(os.path.join(p, "accessioncache.txt")):
+                f=open(os.path.join(p, "accessioncache.txt"))
+                accession=f.read()
+                f.close()
+            else:
+                with open(os.path.join(p, "summary.txt"), "r") as summaryfile:
+                    contents=summaryfile.read()
+                    lines=contents.splitlines()
+                    
+                    for l in lines:
+                        ltoks=l.split(':')
+                        if ltoks[0]=="Accession nr":
+                            accession=ltoks[1].strip()
+                            f=open(os.path.join(p, "accessioncache.txt"), "w")
+                            f.write(accession)
+                            f.close()
+            if accession==a:
+                outlist.append(p)
+                printTitle(p)
+    dumpLQF(outlist, lqf)
+
+
 def main(args):
     progName=args[0]
     seriesOnly=False
@@ -700,6 +760,7 @@ def main(args):
         print("  listyears -- List all years appearing in data matrices.")
         print("  listcontribs -- List all contributors appearing in data matrices.")
         print("       by the first contributor.")
+        print("  getaccession -- Gets the ID numbers of elements given a set of accession numbers")
         #print("  qfunion <list of query files and/or ID numbers> -- Generates the union of the given set of IDs.")
         print("  download <id or paper name> <outputdir> -- Downloads data into the specified directory")
         return
@@ -796,6 +857,9 @@ def main(args):
     
     elif args[2]=="listcontribs":
         listYearContrib(pathlist, getContrib, "First Contributor")
+    
+    elif args[2]=="getbyaccession":
+        getByAccession(pathlist, args[3:], lastQueryFile)
         
     else:
         print("Unknown command: %s" % args[2])
