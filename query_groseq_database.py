@@ -321,10 +321,74 @@ def fetchMatrices(basedir, idlist, protocolSet):
 
 
 def sraHelper(url):
+    print(url.strip())
     f=urllib.urlopen(url.strip())
     content=f.read()
     f.close()
     return content
+
+
+def getSRALinkFromSRX(srxId):
+    #https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=sra&id=420969
+    #ftp://ftp-trace.ncbi.nlm.nih.gov/sra/sra-instant/reads/
+    #https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=sra&term=SRX298678
+    # Start by using the eutils to find out what the SRX's id is:
+    eSearch="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+    eSummary="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+    
+    argSet={"db": "sra", "term": srxId}
+    urlFile=urllib.urlopen(eSearch, urllib.urlencode(argSet))
+    
+    elemTree=ETree.parse(urlFile)
+    urlFile.close()
+    sraId=None
+    
+    root=elemTree.getroot()
+    for child in root:
+        if child.tag=="IdList":
+            for i in child:
+                if i.tag=="Id":
+                    sraId=i.text
+                    break
+    
+    if sraId is None:
+        print("Can't find SRA id.")
+        return None
+    
+    # Now get more information about the SRX:
+    argSet={"db": "sra", "id": sraId}
+    urlFile=urllib.urlopen(eSummary, urllib.urlencode(argSet))
+    
+    elemTree=ETree.parse(urlFile)
+    urlFile.close()
+    srr=None
+    
+    print(sraId)
+    
+    root=elemTree.getroot()
+    docSum=root[0]
+    for child in docSum:
+        if child.tag=="Item":
+            print("Found item tag. Attrib table:")
+            print(child.attrib)
+            if child.attrib["Name"]=="Runs":
+                print(child.text)
+                # The child's contents will have to be manually picked apart, since 
+                # they're marked as a string.
+                toks=child.text.split('"')
+                # This is horribly hackish:
+                srr=toks[1]
+                break
+    
+    if srr is None:
+        print("Can't find srr.")
+        return None
+    
+    print(srr)
+    
+    # Now that we have an SRR string, we can generate an appropriate URL (is this feeling convoluted yet?)
+    url="ftp://ftp-trace.ncbi.nlm.nih.gov/sra/sra-instant/reads/ByRun/sra/SRR/%s/%s/%s.sra" % (srr[:6], srr, srr)
+    return (srr, url)
 
 
 def getSraList(basedir, idlist, pathList, protocolSet):
@@ -342,6 +406,7 @@ def getSraList(basedir, idlist, pathList, protocolSet):
         print("Finding SRAs for %s..." % i)
         matDir=os.path.join(basedir, p, i, "matrices")
         # if the matrix directory exists, then this element probably has the right data:
+        # TODO: Consider running all of this in parallel
         if os.path.exists(matDir):
             sralist=[]
             sraURLlist=[]
@@ -371,13 +436,23 @@ def getSraList(basedir, idlist, pathList, protocolSet):
                             # We want relation URLs:
                             elif child.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Supplementary-Data":
                                 if child.attrib["type"]=="SRA Experiment":
-                                    sraURLlist.append(child.text)
+                                    text=child.text.strip()
+                                    print("Found SRA URL: %s" % text)
+                                    # But wait, there's more! Since the SRA FTP database got unexpectedly changed,
+                                    # we have to go through a lot of extra work to get a simple SRR:
+                                    
+                                    srx=text.split("/")[-1]
+                                    srr, srrurl=getSRALinkFromSRX(srx)
+                                    print("SRA URL has the following SRR: %s" % srr)
+                                    print("Adding link to set: %s" % srrurl)
+                                    sraURLlist.append(srrurl)
             # Now that we (hopefully) have a list of urls:
             if len(sraURLlist)==0:
                 print("No SRA links found in matrix file. Please check for data manually.")
                 return
             
             # We now need to enumerate all SRAs defined in the FTP links:
+            """
             print("Fetching data from specified SRA index URLs (this may take a while)...")
             pl=Pool(500)
             contentSet=pl.map(sraHelper, sraURLlist)
@@ -390,7 +465,7 @@ def getSraList(basedir, idlist, pathList, protocolSet):
             print("\nFound the following SRA elements for download:")
             for s in sralist:
                 print(s)
-            
+            """
             outPath=os.path.join(basedir, p, i, "%s.sralist" % i)
             print("\nWriting list of links to %s" % outPath)
             f=open(outPath, "w")
@@ -400,6 +475,7 @@ def getSraList(basedir, idlist, pathList, protocolSet):
                 f.write("%s\n" % u.strip())
             
             f.close()
+            
                 
         else:
             print("ERROR: No matrices defined in %s" % matDir)
@@ -417,6 +493,20 @@ def getReadyToSra(pathlist, lqf):
         printTitle(r)
     
     dumpLQF(readylist, lqf)
+
+
+def listSRAs(pathlist):
+    for p in pathlist:
+        pid=p.split('/')[-1]
+        srafile=os.path.join(p, "%s.sralist" % pid)
+        if os.path.exists(srafile):
+            srafile=open(srafile, "r")
+            lines=srafile.read().splitlines()
+            srafile.close()
+            
+            printTitle(p)
+            for l in lines:
+                print("%s" % (l.split('/')[-1].split('.')[0]))
 
 
 def getReadyToDownload(pathlist, lqf):
@@ -763,6 +853,7 @@ def main(args):
         print("  getaccession -- Gets the ID numbers of elements given a set of accession numbers")
         #print("  qfunion <list of query files and/or ID numbers> -- Generates the union of the given set of IDs.")
         print("  download <id or paper name> <outputdir> -- Downloads data into the specified directory")
+        print("  listsras <list of id numbers> -- Lists all SRR ids in a given project if getsralist has been run.")
         return
     
     if protocolSet is None:
@@ -860,6 +951,9 @@ def main(args):
     
     elif args[2]=="getbyaccession":
         getByAccession(pathlist, args[3:], lastQueryFile)
+    
+    elif args[2]=="listsras":
+        listSRAs(pathlist)
         
     else:
         print("Unknown command: %s" % args[2])
