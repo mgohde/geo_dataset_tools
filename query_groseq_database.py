@@ -391,6 +391,12 @@ def getSRALinkFromSRX(srxId):
     return (srr, url)
 
 
+def sraURLHelper(inurl):
+    srx=inurl.split("/")[-1]
+    srr, url=getSRALinkFromSRX(srx)
+    return url
+
+
 def getSraList(basedir, idlist, pathList, protocolSet):
     for i in idlist:
         p=findProto(basedir, i, protocolSet)
@@ -437,15 +443,16 @@ def getSraList(basedir, idlist, pathList, protocolSet):
                             elif child.tag=="{http://www.ncbi.nlm.nih.gov/geo/info/MINiML}Supplementary-Data":
                                 if child.attrib["type"]=="SRA Experiment":
                                     text=child.text.strip()
-                                    print("Found SRA URL: %s" % text)
+                                    #print("Found SRA URL: %s" % text)
                                     # But wait, there's more! Since the SRA FTP database got unexpectedly changed,
                                     # we have to go through a lot of extra work to get a simple SRR:
                                     
-                                    srx=text.split("/")[-1]
-                                    srr, srrurl=getSRALinkFromSRX(srx)
-                                    print("SRA URL has the following SRR: %s" % srr)
-                                    print("Adding link to set: %s" % srrurl)
-                                    sraURLlist.append(srrurl)
+                                    #srx=text.split("/")[-1]
+                                    #srr, srrurl=getSRALinkFromSRX(srx)
+                                    #print("SRA URL has the following SRR: %s" % srr)
+                                    #print("Adding link to set: %s" % srrurl)
+                                    #sraURLlist.append(srrurl)
+                                    sraURLlist.append(text)
             # Now that we (hopefully) have a list of urls:
             if len(sraURLlist)==0:
                 print("No SRA links found in matrix file. Please check for data manually.")
@@ -466,11 +473,15 @@ def getSraList(basedir, idlist, pathList, protocolSet):
             for s in sralist:
                 print(s)
             """
+            
+            pl=Pool(500)
+            contentSet=pl.map(sraURLHelper, sraURLlist)
+            
             outPath=os.path.join(basedir, p, i, "%s.sralist" % i)
             print("\nWriting list of links to %s" % outPath)
             f=open(outPath, "w")
             
-            for u in sraURLlist:
+            for u in contentSet:
                 # Each URL already has a newline character in it, for better or for worse.
                 f.write("%s\n" % u.strip())
             
