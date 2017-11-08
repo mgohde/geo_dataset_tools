@@ -244,6 +244,14 @@ This command works in much the same way as `getbyyear', except it searches by th
 This command works in much the same way as `listyears', except it produces a set of contributor names and their frequencies. Please note that it only considers
 the name of the first contributor for any given project, though it may, in the future, search through all contributors.
 
+\subsection{getaccession}
+This command searches through the database for a given GEO accession number or numbers and
+returns a list of all matching database IDs. 
+
+\subsection{listsras}
+This command lists all of the SRA numbers associated with the IDs provided. It assumes that
+getsralist has been run for all of the IDs provided.
+
 \subsection{examples}
 This subsection shows a number of examples that should demonstrate how `query\_groseq\_database' is used in practice.
 For all of the examples listed, the database is stored in a directory named `db'.
